@@ -652,7 +652,7 @@ body {
   border-top: 1px solid rgba(255, 255, 255, 0.06);
 }
 
-.ep-nav-btn {
+#player-footer .nav-btn {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -670,25 +670,25 @@ body {
   overflow: hidden;
 }
 
-.ep-nav-btn > * {
+#player-footer .nav-btn > * {
   position: relative;
   z-index: 1;
 }
 
-.ep-nav-btn:active {
+#player-footer .nav-btn:active {
   background: var(--bg3);
 }
 
-.ep-nav-btn:focus {
+#player-footer .nav-btn:focus {
   background: var(--bg2);
 }
 
-.ep-nav-btn:focus-visible {
+#player-footer .nav-btn:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
 
-.ep-nav-btn:disabled {
+#player-footer .nav-btn:disabled {
   opacity: 0.25;
   pointer-events: none;
 }
@@ -697,13 +697,13 @@ body {
   margin-left: auto;
 }
 
-.ep-nav-btn.autoplay-loading {
+#player-footer .nav-btn.autoplay-loading {
   border-color: var(--accent) !important;
   color: #fff !important;
   background: rgba(255, 170, 0, 0.1) !important;
 }
 
-.ep-nav-btn.autoplay-loading::before {
+#player-footer .nav-btn.autoplay-loading::before {
   content: '';
   position: absolute;
   top: 0;
@@ -1084,7 +1084,7 @@ body {
     justify-content: space-between;
   }
 
-  .ep-nav-btn {
+  #player-footer .nav-btn {
     padding: 7px 14px;
     font-size: 11.5px;
     border-radius: 18px;
