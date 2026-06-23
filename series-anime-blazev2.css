@@ -652,7 +652,7 @@ body {
   border-top: 1px solid rgba(255, 255, 255, 0.06);
 }
 
-.nav-btn {
+.ep-nav-btn {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -670,25 +670,25 @@ body {
   overflow: hidden;
 }
 
-.nav-btn > * {
+.ep-nav-btn > * {
   position: relative;
   z-index: 1;
 }
 
-.nav-btn:active {
+.ep-nav-btn:active {
   background: var(--bg3);
 }
 
-.nav-btn:focus {
+.ep-nav-btn:focus {
   background: var(--bg2);
 }
 
-.nav-btn:focus-visible {
+.ep-nav-btn:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
 
-.nav-btn:disabled {
+.ep-nav-btn:disabled {
   opacity: 0.25;
   pointer-events: none;
 }
@@ -697,13 +697,13 @@ body {
   margin-left: auto;
 }
 
-.nav-btn.autoplay-loading {
+.ep-nav-btn.autoplay-loading {
   border-color: var(--accent) !important;
   color: #fff !important;
   background: rgba(255, 170, 0, 0.1) !important;
 }
 
-.nav-btn.autoplay-loading::before {
+.ep-nav-btn.autoplay-loading::before {
   content: '';
   position: absolute;
   top: 0;
@@ -1084,7 +1084,7 @@ body {
     justify-content: space-between;
   }
 
-  .nav-btn {
+  .ep-nav-btn {
     padding: 7px 14px;
     font-size: 11.5px;
     border-radius: 18px;
@@ -1096,7 +1096,7 @@ body {
    MODAL DE REPORTES
    ══════════════════════════════════════════════════════════ */
 
-.modal-x-btn {
+.ep-modal-x-btn {
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid rgba(255, 255, 255, 0.07);
   color: var(--text2);
@@ -1113,12 +1113,12 @@ body {
   -webkit-tap-highlight-color: transparent;
 }
 
-.modal-x-btn:active {
+.ep-modal-x-btn:active {
   background: rgba(255, 255, 255, 0.12);
   transform: scale(0.92);
 }
 
-.modal-x-btn:focus-visible {
+.ep-modal-x-btn:focus-visible {
   background: rgba(255, 255, 255, 0.1);
   box-shadow: 0 0 0 2px var(--accent);
 }
