@@ -1603,7 +1603,7 @@ if (srvBtn) {
 
 // Quitar foco de todos los botones después de hacer click
 document.addEventListener('click', (e) => {
-    if (e.target.closest('.action-btn, .nav-btn')) {
+    if (e.target.closest('.action-btn, .ep-nav-btn')) {
         setTimeout(() => {
             if (document.activeElement) {
                 document.activeElement.blur();
