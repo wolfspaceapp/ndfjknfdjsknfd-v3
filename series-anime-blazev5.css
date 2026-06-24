@@ -1347,7 +1347,9 @@ body {
 /* ── Botones de header/footer del player en foco TV ──────*/
 [data-tv="1"] #player-header button:focus,
 [data-tv="1"] #player-footer button:focus,
+[data-tv="1"] #player-header .action-btn:focus,
 #player-header button:focus-visible,
+#player-header .action-btn:focus-visible,
 #player-footer button:focus-visible {
   outline: 3px solid var(--accent) !important;
   outline-offset: 3px !important;
@@ -1358,14 +1360,52 @@ body {
   z-index: 10;
 }
 
+/* ── Action buttons con SVG en foco ──────────────────────*/
+[data-tv="1"] #player-header .action-btn:focus svg,
+#player-header .action-btn:focus-visible svg {
+  stroke: var(--accent) !important;
+}
+
 /* ── Player wrap en foco TV ──────────────────────────────*/
-#player-wrap:focus {
+#player-wrap:focus,
+#playerContainer:focus {
   outline: none !important;
 }
 
-[data-tv="1"] #player-wrap:focus {
+[data-tv="1"] #player-wrap:focus,
+[data-tv="1"] #playerContainer:focus {
   outline: none !important;
   box-shadow: inset 0 0 0 3px rgba(255, 170, 0, 0.2) !important;
+}
+
+/* ── Indicador visual sutil de que el player tiene el foco ──*/
+[data-tv="1"] #playerContainer:focus::before {
+  content: '↑ Menú  |  ↓ Controles  |  ← → ±10s';
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(10, 10, 10, 0.88);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  padding: 6px 14px;
+  border-radius: 8px;
+  font-size: 10px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.65);
+  border: 1px solid rgba(255, 170, 0, 0.3);
+  z-index: 999;
+  opacity: 0;
+  animation: fadeInOutHint 2.5s ease forwards;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+@keyframes fadeInOutHint {
+  0% { opacity: 0; transform: translate(-50%, -10px); }
+  15% { opacity: 1; transform: translate(-50%, 0); }
+  85% { opacity: 1; transform: translate(-50%, 0); }
+  100% { opacity: 0; transform: translate(-50%, -10px); }
 }
 
 /* ── Botones del wolf-player en foco TV ──────────────────*/
@@ -1392,51 +1432,9 @@ body {
   transform: scale(1.05) !important;
 }
 
-/* ── Barra de ayuda de control remoto ─────────────────────*/
-#tv-help-bar {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  z-index: 9999;
-  background: rgba(10, 10, 10, 0.92);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border-top: 1px solid rgba(255, 170, 0, 0.25);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 24px;
-  padding: 8px 20px;
-  flex-wrap: wrap;
-  transition: opacity 0.4s ease, transform 0.4s ease;
-}
-
-#tv-help-bar span {
-  font-size: 11px;
-  font-weight: 600;
-  color: rgba(255, 255, 255, 0.65);
-  white-space: nowrap;
-  letter-spacing: 0.3px;
-}
-
-#tv-help-bar span::before {
-  content: '';
-  display: inline-block;
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: var(--accent);
-  margin-right: 6px;
-  vertical-align: middle;
-  opacity: 0.7;
-}
-
-#tv-help-bar.hidden {
-  opacity: 0;
-  transform: translateY(100%);
-  pointer-events: none;
-}
+/* ── Barra de ayuda de control remoto (eliminada) ─────────
+   Los controles Smart TV funcionan internamente sin guía visual
+   ───────────────────────────────────────────────────────────*/
 
 /* ══════════════════════════════════════════════════════════
    MODO TV — AJUSTES DE LAYOUT PARA PANTALLA GRANDE
