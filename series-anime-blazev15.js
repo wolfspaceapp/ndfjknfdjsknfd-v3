@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════
-// SISTEMA INTEGRADO DE SERIES CON REPRODUCTOR (Fallo de avance resuelto)
+// SISTEMA INTEGRADO DE SERIES CON REPRODUCTOR (Fallo de avance y carga infinita resuelto)
 // ═══════════════════════════════════════════════════════════
 
 const WATCHED_KEY = 'watched_' + SERIE.id;
@@ -14,8 +14,38 @@ let resumeToastShown = false;
 
 const GLOBAL_IS_MOBILE = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
 
+// ── Función de Limpieza Agresiva de Memoria y Red ─────────
+// Esto previene que videos anteriores sigan descargando datos en segundo plano
+// y provoquen el problema de "carga infinita" al cambiar de episodio.
+function cleanupVideos() {
+    if (hlsInstance) {
+        try {
+            hlsInstance.stopLoad();
+            hlsInstance.detachMedia();
+            hlsInstance.destroy();
+        } catch (e) {}
+        hlsInstance = null;
+    }
+    if (wolfInstance) {
+        try {
+            if (typeof wolfInstance.destroy === 'function') wolfInstance.destroy();
+        } catch (e) {}
+        wolfInstance = null;
+    }
+
+    const videos = document.querySelectorAll('video, #player-wrap video, #wolf-player-container video');
+    videos.forEach(v => {
+        try {
+            v.pause();
+            v.removeAttribute('src');
+            v.src = ''; // Crítico: vacía la fuente actual
+            v.load();   // Crítico: fuerza al navegador a abortar peticiones de red pendientes
+            v.remove(); // Elimina el elemento del DOM
+        } catch (e) {}
+    });
+}
+
 // ── Interceptor para control de navegación en Wolf Player ────
-// Deshabilita volumen con flechas ↑↓ y seek con ← → a menos que estés en la barra de progreso
 (function() {
     document.addEventListener('keydown', (e) => {
         const playerContainer = document.getElementById('playerContainer') || document.getElementById('wolf-player-container');
@@ -415,14 +445,7 @@ function closePlayer() {
     const sHeader = $('serie-header');
     if (sHeader) sHeader.style.display = 'flex';
 
-    if (hlsInstance) { hlsInstance.destroy(); hlsInstance = null; }
-    if (wolfInstance) {
-        if (typeof wolfInstance.destroy === 'function') wolfInstance.destroy();
-        wolfInstance = null;
-    }
-
-    const residualVideos = $('player-wrap').querySelectorAll('video');
-    residualVideos.forEach(v => { v.pause(); v.removeAttribute('src'); v.load(); v.remove(); });
+    cleanupVideos();
 
     if (window._autoplayTimer) {
         clearInterval(window._autoplayTimer);
@@ -940,7 +963,6 @@ function handleAutoplayNext() {
                     if (span) span.textContent = originalText;
                 }
                 
-                // Eliminado swapVideoInFullscreen: llamamos unificadamente a playEpisode que es seguro con pantalla completa.
                 playEpisode(nextSeasonIdx, nextEp.num, true, true);
             }
         }, 1000);
@@ -1118,16 +1140,14 @@ function buildVideoPlayer(wrap, url, poster, videoType, mainLoader, server, requ
 
                 let saveInterval = null;
                 v._resumeChecked = false;
-                let playPromise = null;
-
+                
                 const safePlay = () => {
-                    if (playPromise !== undefined && playPromise !== null) {
-                        playPromise.catch(()=>{}).then(() => {
-                            playPromise = v.play().catch(e => console.warn(e));
-                        });
-                    } else {
-                        playPromise = v.play().catch(e => console.warn(e));
-                    }
+                    try {
+                        const p = v.play();
+                        if (p !== undefined && p !== null) {
+                            p.catch(e => console.warn('Autoplay evitado:', e.message));
+                        }
+                    } catch(e) {}
                 };
 
                 const checkResume = () => {
@@ -1278,16 +1298,14 @@ function buildVideoPlayer(wrap, url, poster, videoType, mainLoader, server, requ
         
         let saveInterval = null;
         video._resumeChecked = false;
-        let playPromiseFallback = null;
 
         const safePlayFallback = () => {
-            if (playPromiseFallback !== undefined && playPromiseFallback !== null) {
-                playPromiseFallback.catch(()=>{}).then(() => {
-                    playPromiseFallback = video.play().catch(e => console.warn(e));
-                });
-            } else {
-                playPromiseFallback = video.play().catch(e => console.warn(e));
-            }
+            try {
+                const p = video.play();
+                if (p !== undefined && p !== null) {
+                    p.catch(e => console.warn('Autoplay evitado (fallback):', e.message));
+                }
+            } catch(e) {}
         };
         
         const checkResumeFallback = () => {
@@ -1350,18 +1368,8 @@ function renderPlayer(animate = false) {
     const container = document.getElementById('wolf-player-container');
     const isContainerFs = container && fsElement === container;
 
-    if (hlsInstance) { hlsInstance.destroy(); hlsInstance = null; }
-    if (wolfInstance) {
-        if (typeof wolfInstance.destroy === 'function') wolfInstance.destroy();
-        wolfInstance = null;
-    }
-
-    const prevVideo = wrap.querySelector('video');
-    if (prevVideo) {
-        prevVideo.pause();
-        prevVideo.removeAttribute('src');
-        prevVideo.load();
-    }
+    // Ejecuta limpieza a fondo antes de destruir contenedores para evitar fugas de memoria
+    cleanupVideos();
 
     let loaderTarget = wrap;
 
