@@ -2002,14 +2002,19 @@ document.addEventListener('webkitfullscreenchange', () => {
         document.querySelectorAll('#player-header button, #player-header .action-btn, #player-footer button').forEach(el => {
             if (!el.getAttribute('tabindex')) el.setAttribute('tabindex', '0');
         });
+        // Y los botones del header de la serie
+        document.querySelectorAll('#serie-header button').forEach(el => {
+            if (!el.getAttribute('tabindex')) el.setAttribute('tabindex', '0');
+        });
     }
 
     // ── Contextos de navegación ────────────────────────────
     // La pantalla se divide en zonas lógicas:
-    // 1. "episodios"   → lista de .ep-card
-    // 2. "tabs"        → .season-tab
-    // 3. "player"      → header/footer del reproductor
-    // 4. "modal"       → cualquier modal abierto
+    // 1. "serie-header"  → botones del header principal (Volver, Reset)
+    // 2. "episodios"     → lista de .ep-card
+    // 3. "tabs"          → .season-tab
+    // 4. "player"        → header/footer del reproductor
+    // 5. "modal"         → cualquier modal abierto
 
     function getActiveZone() {
         const playerSection = document.getElementById('player-section');
@@ -2023,12 +2028,86 @@ document.addEventListener('webkitfullscreenchange', () => {
             if (reportOverlay && reportOverlay.style.display === 'flex') return 'modal-report';
             const optionsOverlay = document.getElementById('serie-options-overlay');
             if (optionsOverlay && optionsOverlay.style.display === 'flex') return 'modal-options';
+            const castOverlay = document.getElementById('cast-modal-overlay');
+            if (castOverlay && castOverlay.style.display === 'flex') return 'modal-cast';
             // ¿fsOverlay de autoplay?
             if (document.querySelector('.autoplay-fs-overlay')) return 'modal-autoplay';
             return 'player';
         }
 
+        // Ver si estamos en el header de la serie
+        const serieHeader = document.getElementById('serie-header');
+        if (serieHeader && serieHeader.style.display !== 'none') {
+            const focused = document.activeElement;
+            if (focused && serieHeader.contains(focused)) return 'serie-header';
+        }
+
         return 'episodes';
+    }
+
+    // ── Navegación en el header de la serie ────────────────
+    function navigateSerieHeader(key) {
+        const header = document.getElementById('serie-header');
+        if (!header) return false;
+
+        const btns = Array.from(header.querySelectorAll('button:not([disabled])'))
+            .filter(b => {
+                if (b.offsetParent === null) return false;
+                const style = window.getComputedStyle(b);
+                return style.display !== 'none' && style.visibility !== 'hidden';
+            });
+
+        if (!btns.length) return false;
+
+        const focused = document.activeElement;
+        let idx = btns.indexOf(focused);
+
+        // Si ningún botón tiene foco, enfocar el primero
+        if (idx === -1) {
+            if (key === 'ArrowDown') {
+                // Si presiona abajo sin foco, ir a tabs o cards
+                const firstTab = document.querySelector('.season-tab');
+                const firstCard = document.querySelector('.ep-card');
+                if (firstTab) { firstTab.focus(); return true; }
+                if (firstCard) { firstCard.focus(); return true; }
+            }
+            btns[0].focus();
+            return true;
+        }
+
+        switch (key) {
+            case 'ArrowLeft': {
+                const prev = btns[idx - 1];
+                if (prev) { prev.focus(); return true; }
+                return false;
+            }
+            case 'ArrowRight': {
+                const next = btns[idx + 1];
+                if (next) { next.focus(); return true; }
+                return false;
+            }
+            case 'ArrowDown': {
+                // Bajar a tabs o episodios
+                const firstTab = document.querySelector('.season-tab');
+                const firstCard = document.querySelector('.ep-card');
+                if (firstTab) { firstTab.focus(); return true; }
+                if (firstCard) { firstCard.focus(); return true; }
+                return false;
+            }
+            case 'ArrowUp':
+                // Ya estamos arriba
+                return false;
+            case 'ok':
+            case 'Enter':
+                focused.click();
+                return true;
+            case 'back':
+            case 'Escape':
+                // Volver atrás
+                history.back();
+                return true;
+        }
+        return false;
     }
 
     // ── Navegación en lista de episodios (grid) ────────────
@@ -2065,9 +2144,17 @@ document.addEventListener('webkitfullscreenchange', () => {
             }
             case 'ArrowUp': {
                 if (idx < cardsPerRow) {
-                    // Subir a las tabs de temporadas
+                    // Subir a las tabs de temporadas, o si no hay, al header
                     const activTab = document.querySelector('.season-tab.active') || document.querySelector('.season-tab');
                     if (activTab) { activTab.focus(); return true; }
+                    // Si no hay tabs, ir al header de la serie
+                    const serieHeader = document.getElementById('serie-header');
+                    if (serieHeader && serieHeader.style.display !== 'none') {
+                        const resetBtn = document.getElementById('btn-serie-reset');
+                        const backBtn = serieHeader.querySelector('.back-btn');
+                        if (resetBtn) { resetBtn.focus(); return true; }
+                        if (backBtn) { backBtn.focus(); return true; }
+                    }
                     return false;
                 }
                 const prev = cards[idx - cardsPerRow];
@@ -2111,7 +2198,14 @@ document.addEventListener('webkitfullscreenchange', () => {
 
         if (idx === -1) {
             if (key === 'ArrowUp') {
-                // Ya estamos arriba
+                // Subir al header de la serie
+                const serieHeader = document.getElementById('serie-header');
+                if (serieHeader && serieHeader.style.display !== 'none') {
+                    const resetBtn = document.getElementById('btn-serie-reset');
+                    const backBtn = serieHeader.querySelector('.back-btn');
+                    if (resetBtn) { resetBtn.focus(); return true; }
+                    if (backBtn) { backBtn.focus(); return true; }
+                }
                 return false;
             }
             tabs[0].focus();
@@ -2128,6 +2222,17 @@ document.addEventListener('webkitfullscreenchange', () => {
                 const next = tabs[idx + 1];
                 if (next) next.focus();
                 return true;
+            }
+            case 'ArrowUp': {
+                // Subir al header de la serie
+                const serieHeader = document.getElementById('serie-header');
+                if (serieHeader && serieHeader.style.display !== 'none') {
+                    const resetBtn = document.getElementById('btn-serie-reset');
+                    const backBtn = serieHeader.querySelector('.back-btn');
+                    if (resetBtn) { resetBtn.focus(); return true; }
+                    if (backBtn) { backBtn.focus(); return true; }
+                }
+                return false;
             }
             case 'ArrowDown': {
                 // Bajar a la lista de episodios
@@ -2307,15 +2412,20 @@ document.addEventListener('webkitfullscreenchange', () => {
             btns = Array.from(document.querySelectorAll('#report-modal-overlay button:not([disabled])'));
         } else if (zone === 'modal-options') {
             btns = Array.from(document.querySelectorAll('#serie-options-overlay button:not([disabled])'));
+        } else if (zone === 'modal-cast') {
+            btns = Array.from(document.querySelectorAll('#cast-modal button, #cast-modal a, #cast-modal-close, #cast-modal-download, #cast-modal-transmit'));
         }
-        btns = btns.filter(b => b.offsetParent !== null);
+        btns = btns.filter(b => b && b.offsetParent !== null);
         if (!btns.length) return false;
 
         const focused = document.activeElement;
         let idx = btns.indexOf(focused);
 
         // Si ningún botón tiene foco, enfocar el primero
-        if (idx === -1) { btns[0].focus(); return true; }
+        if (idx === -1) { 
+            btns[0].focus(); 
+            return true; 
+        }
 
         switch (key) {
             case 'ArrowLeft':
@@ -2341,7 +2451,8 @@ document.addEventListener('webkitfullscreenchange', () => {
                     '#vp-resume-overlay .vp-resume-no, ' +
                     '#fs-cancel-btn, ' +
                     '#report-modal-close, ' +
-                    '#serie-options-close'
+                    '#serie-options-close, ' +
+                    '#cast-modal-close'
                 );
                 if (cancelBtn) cancelBtn.click();
                 return true;
@@ -2382,6 +2493,21 @@ document.addEventListener('webkitfullscreenchange', () => {
         // No interferir con inputs de texto
         if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
 
+        // Si el foco está en un botón o control DENTRO de Wolf Player, dejar que Wolf Player lo maneje
+        const focused = document.activeElement;
+        const insideWolfPlayer = focused && (
+            focused.closest('#playerContainer') ||
+            focused.id === 'playerContainer' ||
+            (focused.tagName === 'BUTTON' && focused.closest('.wolf-controls')) ||
+            (focused.tagName === 'BUTTON' && focused.closest('.controls-bar'))
+        );
+
+        // Si estamos dentro de los controles de Wolf Player y es OK/Enter, dejar pasar
+        if (insideWolfPlayer && (e.key === 'Enter' || e.code === 'Enter' || e.code === 'NumpadEnter')) {
+            // Permitir que el botón se active normalmente
+            return;
+        }
+
         const rawKey = REMOTE_KEY_MAP[e.key] || REMOTE_KEY_MAP[e.code] || e.key || e.code;
         const zone = getActiveZone();
         let handled = false;
@@ -2398,6 +2524,9 @@ document.addEventListener('webkitfullscreenchange', () => {
         }
 
         switch (zone) {
+            case 'serie-header':
+                handled = navigateSerieHeader(rawKey);
+                break;
             case 'player':
                 handled = navigatePlayer(rawKey);
                 break;
@@ -2405,6 +2534,7 @@ document.addEventListener('webkitfullscreenchange', () => {
             case 'modal-report':
             case 'modal-options':
             case 'modal-autoplay':
+            case 'modal-cast':
                 handled = navigateModal(zone, rawKey);
                 break;
             case 'episodes': {
