@@ -14,6 +14,49 @@ let resumeToastShown = false;
 
 const GLOBAL_IS_MOBILE = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
 
+// ── Interceptor para control de navegación en Wolf Player ────
+// Deshabilita volumen con flechas ↑↓ y seek con ← → a menos que estés en la barra de progreso
+(function() {
+    document.addEventListener('keydown', (e) => {
+        const playerContainer = document.getElementById('playerContainer');
+        if (!playerContainer) return;
+        
+        const focused = document.activeElement;
+        
+        // Detectar si estamos en la barra de progreso
+        const inProgressBar = focused && (
+            focused.id === 'progressWrap' ||
+            focused.closest('#progressWrap') ||
+            focused.classList.contains('progress-wrap')
+        );
+        
+        // Si estamos en el playerContainer (video) o en un elemento sin botón, pero NO en la barra de progreso
+        const inPlayerVideo = focused && (
+            focused.id === 'playerContainer' ||
+            (focused.closest('#playerContainer') && !focused.closest('button') && !inProgressBar)
+        );
+        
+        // Si estamos en el video (no en barra de progreso) y presionan ArrowUp/ArrowDown
+        if (inPlayerVideo && (e.code === 'ArrowUp' || e.code === 'ArrowDown')) {
+            // Prevenir completamente que Wolf Player maneje esto para volumen
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            // Nuestro sistema de navegación lo manejará
+        }
+        
+        // Si estamos en el video (no en barra de progreso) y presionan ArrowLeft/ArrowRight
+        if (inPlayerVideo && (e.code === 'ArrowLeft' || e.code === 'ArrowRight')) {
+            // Prevenir que Wolf Player haga seek
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            // Nuestro sistema de navegación lo manejará (o no hará nada)
+        }
+        
+        // Si estamos EN la barra de progreso, permitir que Wolf Player maneje ← → para seek
+        // (no hacemos nada aquí, dejamos que el evento pase)
+    }, { capture: true });
+})();
+
 // ── Utilidades ────────────────────────────────────────────
 const $ = id => document.getElementById(id);
 
@@ -2014,6 +2057,11 @@ document.addEventListener('webkitfullscreenchange', () => {
         document.querySelectorAll('#playerContainer .opt-btn, #playerContainer .ctrl-btn, #playerContainer .adapt-btn').forEach(el => {
             if (!el.getAttribute('tabindex')) el.setAttribute('tabindex', '0');
         });
+        // Y la barra de progreso
+        const progressBar = document.getElementById('progressWrap');
+        if (progressBar && !progressBar.getAttribute('tabindex')) {
+            progressBar.setAttribute('tabindex', '0');
+        }
     }
 
     // ── Contextos de navegación ────────────────────────────
@@ -2346,7 +2394,7 @@ document.addEventListener('webkitfullscreenchange', () => {
     }
 
     // ── Navegación en el player (header/footer) ────────────
-    let _playerFocusZone = 'video'; // 'video' | 'header' | 'footer' | 'wolf-controls'
+    let _playerFocusZone = 'video'; // 'video' | 'header' | 'footer' | 'wolf-controls' | 'progress-bar'
 
     function navigatePlayer(key) {
         const playerSection = document.getElementById('player-section');
@@ -2365,6 +2413,9 @@ document.addEventListener('webkitfullscreenchange', () => {
                 const style = window.getComputedStyle(b);
                 return style.display !== 'none' && style.visibility !== 'hidden';
             });
+
+        // Barra de progreso
+        const progressBar = document.getElementById('progressWrap');
 
         // Botones de Wolf Player (controles inferiores)
         const wolfControlBtns = Array.from(document.querySelectorAll(
@@ -2388,6 +2439,13 @@ document.addEventListener('webkitfullscreenchange', () => {
         const inFooter = focused && playerSection.querySelector('#player-footer') &&
                           playerSection.querySelector('#player-footer').contains(focused);
         
+        // Detectar si el foco está en la barra de progreso
+        const inProgressBar = progressBar && (
+            focused === progressBar ||
+            focused.id === 'progressWrap' ||
+            focused.closest('#progressWrap')
+        );
+        
         // Detectar si el foco está en un botón de Wolf Player
         const inWolfControls = focused && wolfControlBtns.includes(focused);
         
@@ -2403,7 +2461,61 @@ document.addEventListener('webkitfullscreenchange', () => {
             focused.closest('#player-wrap')
         );
 
-        const inPlayer = !inHeader && !inFooter && !inWolfControls;
+        const inPlayer = !inHeader && !inFooter && !inWolfControls && !inProgressBar;
+
+        // Si el foco está en la barra de progreso
+        if (inProgressBar) {
+            switch (key) {
+                case 'ArrowLeft':
+                case 'ArrowRight':
+                    // NO capturar, dejar que Wolf Player maneje el seek
+                    return false;
+                case 'ArrowUp': {
+                    // Subir al header
+                    if (headerBtns.length) {
+                        _playerFocusZone = 'header';
+                        headerBtns[0].focus();
+                        return true;
+                    }
+                    // O al player
+                    _playerFocusZone = 'video';
+                    if (wolfPlayerContainer) {
+                        wolfPlayerContainer.focus();
+                        return true;
+                    }
+                    return false;
+                }
+                case 'ArrowDown': {
+                    // Bajar a controles de Wolf Player
+                    if (wolfControlBtns.length) {
+                        _playerFocusZone = 'wolf-controls';
+                        const playBtn = wolfControlBtns.find(b => b.id === 'btnPlay');
+                        if (playBtn) {
+                            playBtn.focus();
+                        } else {
+                            wolfControlBtns[0].focus();
+                        }
+                        return true;
+                    }
+                    // O al footer
+                    if (footerBtns.length) {
+                        _playerFocusZone = 'footer';
+                        footerBtns[0].focus();
+                        return true;
+                    }
+                    return false;
+                }
+                case 'ok':
+                case 'Enter':
+                    // Volver al player
+                    _playerFocusZone = 'video';
+                    if (wolfPlayerContainer) {
+                        wolfPlayerContainer.focus();
+                        return true;
+                    }
+                    return false;
+            }
+        }
 
         // Si el foco está en un botón de Wolf Player
         if (inWolfControls) {
@@ -2426,7 +2538,13 @@ document.addEventListener('webkitfullscreenchange', () => {
                     return false;
                 }
                 case 'ArrowUp': {
-                    // Subir al header
+                    // Subir a la barra de progreso si existe
+                    if (progressBar) {
+                        _playerFocusZone = 'progress-bar';
+                        progressBar.focus();
+                        return true;
+                    }
+                    // O subir al header
                     if (headerBtns.length) {
                         _playerFocusZone = 'header';
                         headerBtns[0].focus();
@@ -2461,7 +2579,7 @@ document.addEventListener('webkitfullscreenchange', () => {
         if (inPlayer || inWolfPlayer) {
             switch (key) {
                 case 'ArrowUp':
-                    // Subir → ir al header
+                    // Subir → ir al header (NO CAMBIAR VOLUMEN)
                     if (headerBtns.length) {
                         _playerFocusZone = 'header';
                         headerBtns[0].focus();
@@ -2469,7 +2587,13 @@ document.addEventListener('webkitfullscreenchange', () => {
                     }
                     return false;
                 case 'ArrowDown':
-                    // Bajar → ir a controles de Wolf Player primero
+                    // Bajar → ir a la barra de progreso primero si existe
+                    if (progressBar) {
+                        _playerFocusZone = 'progress-bar';
+                        progressBar.focus();
+                        return true;
+                    }
+                    // Si no, ir a controles de Wolf Player
                     if (wolfControlBtns.length) {
                         _playerFocusZone = 'wolf-controls';
                         // Enfocar el botón de play (centro) o el primero disponible
@@ -2490,9 +2614,9 @@ document.addEventListener('webkitfullscreenchange', () => {
                     return false;
                 case 'ArrowLeft':
                 case 'ArrowRight':
-                    // Si estamos en el Wolf Player, dejar que él maneje izq/der
-                    // (para seek adelante/atrás)
-                    return false;
+                    // Si estamos en el video, NO hacer seek
+                    // Solo navegación (no hacemos nada)
+                    return true; // Capturar para prevenir seek
                 case 'ok':
                 case 'Enter':
                     // OK en el video = play/pause (lo maneja Wolf Player)
