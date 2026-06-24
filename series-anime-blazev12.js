@@ -1386,6 +1386,22 @@ function buildVideoPlayer(wrap, url, poster, videoType, mainLoader, server, requ
 
                 let saveInterval = null;
                 v._resumeChecked = false;
+                let playPromise = null;
+
+                // Función segura para reproducir el video sin conflictos
+                const safePlay = () => {
+                    if (playPromise) {
+                        playPromise.then(() => {
+                            playPromise = v.play().catch(err => {
+                                console.warn('Error al reproducir:', err.message);
+                            });
+                        });
+                    } else {
+                        playPromise = v.play().catch(err => {
+                            console.warn('Error al reproducir:', err.message);
+                        });
+                    }
+                };
 
                 const checkResume = () => {
                     if (requestId && requestId !== renderCount) return;
@@ -1407,14 +1423,20 @@ function buildVideoPlayer(wrap, url, poster, videoType, mainLoader, server, requ
 
                         if (hasSignificantProgress && isNearStart) {
                             showResumeToast(saved, () => {
-                                const jump = () => { v.currentTime = saved; v.play(); };
+                                const jump = () => { 
+                                    v.currentTime = saved; 
+                                    safePlay(); 
+                                };
                                 if (v.readyState >= 1) jump();
                                 else {
-                                    const h = () => { v.currentTime = saved; v.removeEventListener('loadedmetadata', h); };
+                                    const h = () => { 
+                                        v.currentTime = saved; 
+                                        v.removeEventListener('loadedmetadata', h); 
+                                    };
                                     v.addEventListener('loadedmetadata', h);
-                                    v.play();
+                                    safePlay();
                                 }
-                            }, () => { v.play(); });
+                            }, () => { safePlay(); });
                         }
                     };
 
@@ -1533,6 +1555,26 @@ function buildVideoPlayer(wrap, url, poster, videoType, mainLoader, server, requ
         
         let saveInterval = null;
         video._resumeChecked = false;
+        let playPromiseFallback = null;
+
+        // Función segura para reproducir el video sin conflictos
+        const safePlayFallback = () => {
+            if (playPromiseFallback) {
+                playPromiseFallback.then(() => {
+                    playPromiseFallback = video.play().catch(err => {
+                        console.warn('Error al reproducir (fallback):', err.message);
+                    });
+                }).catch(() => {
+                    playPromiseFallback = video.play().catch(err => {
+                        console.warn('Error al reproducir (fallback):', err.message);
+                    });
+                });
+            } else {
+                playPromiseFallback = video.play().catch(err => {
+                    console.warn('Error al reproducir (fallback):', err.message);
+                });
+            }
+        };
         
         const checkResumeFallback = () => {
             if (requestId && requestId !== renderCount) return;
