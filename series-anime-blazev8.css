@@ -1344,6 +1344,26 @@ body {
   color: var(--accent) !important;
 }
 
+/* ── Switch de episodios en foco TV ───────────────────────*/
+[data-tv="1"] .ep-switch:focus,
+.ep-switch:focus-visible {
+  outline: 3px solid var(--accent) !important;
+  outline-offset: 4px !important;
+  transform: scale(1.15) !important;
+  z-index: 20;
+}
+
+[data-tv="1"] .ep-switch:focus .ep-switch-track,
+.ep-switch:focus-visible .ep-switch-track {
+  box-shadow: 0 0 0 2px rgba(255, 170, 0, 0.3) !important;
+  border-color: var(--accent) !important;
+}
+
+[data-tv="1"] .ep-switch:focus .ep-switch-thumb,
+.ep-switch:focus-visible .ep-switch-thumb {
+  box-shadow: 0 0 8px rgba(255, 170, 0, 0.6) !important;
+}
+
 /* ── Botones de header/footer del player en foco TV ──────*/
 [data-tv="1"] #player-header button:focus,
 [data-tv="1"] #player-footer button:focus,
@@ -1430,10 +1450,27 @@ body {
 
 /* ── Botones del wolf-player en foco TV ──────────────────*/
 [data-tv="1"] #playerContainer button:focus,
-#playerContainer button:focus-visible {
+#playerContainer button:focus-visible,
+[data-tv="1"] #playerContainer .opt-btn:focus,
+#playerContainer .opt-btn:focus-visible,
+[data-tv="1"] #playerContainer .ctrl-btn:focus,
+#playerContainer .ctrl-btn:focus-visible,
+[data-tv="1"] #playerContainer .adapt-btn:focus,
+#playerContainer .adapt-btn:focus-visible {
   outline: 3px solid var(--accent) !important;
   outline-offset: 3px !important;
   transform: scale(1.12) !important;
+  background: rgba(255, 170, 0, 0.2) !important;
+  z-index: 100;
+}
+
+/* Resaltar los SVG dentro de los botones de Wolf Player cuando tienen foco */
+[data-tv="1"] #playerContainer button:focus svg,
+#playerContainer button:focus-visible svg,
+[data-tv="1"] #playerContainer .opt-btn:focus svg,
+#playerContainer .opt-btn:focus-visible svg {
+  fill: var(--accent) !important;
+  stroke: var(--accent) !important;
 }
 
 /* ── Resume modal buttons ─────────────────────────────────*/
