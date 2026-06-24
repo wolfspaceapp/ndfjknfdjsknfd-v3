@@ -1998,12 +1998,20 @@ document.addEventListener('webkitfullscreenchange', () => {
         document.querySelectorAll('.ep-card, .season-tab').forEach(el => {
             if (!el.getAttribute('tabindex')) el.setAttribute('tabindex', '0');
         });
+        // Hacer focusables los switches de episodios
+        document.querySelectorAll('.ep-switch').forEach(el => {
+            if (!el.getAttribute('tabindex')) el.setAttribute('tabindex', '0');
+        });
         // También hacer focusables los botones del player header y .action-btn
         document.querySelectorAll('#player-header button, #player-header .action-btn, #player-footer button').forEach(el => {
             if (!el.getAttribute('tabindex')) el.setAttribute('tabindex', '0');
         });
         // Y los botones del header de la serie
         document.querySelectorAll('#serie-header button').forEach(el => {
+            if (!el.getAttribute('tabindex')) el.setAttribute('tabindex', '0');
+        });
+        // Y los botones de Wolf Player
+        document.querySelectorAll('#playerContainer .opt-btn, #playerContainer .ctrl-btn, #playerContainer .adapt-btn').forEach(el => {
             if (!el.getAttribute('tabindex')) el.setAttribute('tabindex', '0');
         });
     }
@@ -2117,6 +2125,89 @@ document.addEventListener('webkitfullscreenchange', () => {
         if (!cards.length) return;
 
         let focused = document.activeElement;
+        
+        // Detectar si estamos en un switch de episodio
+        const isOnSwitch = focused && focused.classList.contains('ep-switch');
+        
+        if (isOnSwitch) {
+            // Navegación cuando el foco está en el switch
+            const card = focused.closest('.ep-card');
+            const cardIdx = cards.indexOf(card);
+            
+            switch (key) {
+                case 'ArrowLeft':
+                    // Volver al card (salir del switch)
+                    if (card) {
+                        card.focus();
+                        return true;
+                    }
+                    return false;
+                case 'ArrowRight':
+                    // Ya estamos en el switch, no hacer nada o volver al card
+                    if (card) {
+                        card.focus();
+                        return true;
+                    }
+                    return false;
+                case 'ArrowUp': {
+                    // Subir al switch del episodio anterior
+                    const firstRect = cards[0].getBoundingClientRect();
+                    const cardsPerRow = cards.filter(c => Math.abs(c.getBoundingClientRect().top - firstRect.top) < 10).length || 1;
+                    const prevCard = cards[cardIdx - cardsPerRow];
+                    if (prevCard) {
+                        const prevSwitch = prevCard.querySelector('.ep-switch');
+                        if (prevSwitch) {
+                            prevSwitch.focus();
+                            prevCard.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+                            return true;
+                        }
+                    }
+                    // Si no hay card arriba, ir a tabs
+                    const activTab = document.querySelector('.season-tab.active') || document.querySelector('.season-tab');
+                    if (activTab) { activTab.focus(); return true; }
+                    return false;
+                }
+                case 'ArrowDown': {
+                    // Bajar al switch del siguiente episodio
+                    const firstRect = cards[0].getBoundingClientRect();
+                    const cardsPerRow = cards.filter(c => Math.abs(c.getBoundingClientRect().top - firstRect.top) < 10).length || 1;
+                    const nextCard = cards[cardIdx + cardsPerRow];
+                    if (nextCard) {
+                        const nextSwitch = nextCard.querySelector('.ep-switch');
+                        if (nextSwitch) {
+                            nextSwitch.focus();
+                            nextCard.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+                            return true;
+                        }
+                    }
+                    return false;
+                }
+                case 'ok':
+                case 'Enter': {
+                    // Toggle el switch
+                    const input = focused.querySelector('input[type="checkbox"]');
+                    if (input) {
+                        input.checked = !input.checked;
+                        // Disparar el evento change
+                        const changeEvent = new Event('change', { bubbles: true });
+                        focused.dispatchEvent(changeEvent);
+                        return true;
+                    }
+                    return false;
+                }
+                case 'back':
+                case 'Escape':
+                    // Volver al card
+                    if (card) {
+                        card.focus();
+                        return true;
+                    }
+                    return false;
+            }
+            return false;
+        }
+        
+        // Navegación normal en cards
         let idx = cards.indexOf(focused);
 
         // Si no hay card enfocada, poner foco en la primera
@@ -2167,16 +2258,22 @@ document.addEventListener('webkitfullscreenchange', () => {
                 return true;
             }
             case 'ArrowRight': {
+                // Ir al switch del episodio
+                const switchEl = focused.querySelector('.ep-switch');
+                if (switchEl) {
+                    switchEl.focus();
+                    return true;
+                }
+                // Si no hay switch, ir al siguiente card
                 const next = cards[idx + 1];
                 if (next) { next.focus(); next.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }
                 return true;
             }
             case 'ok':
             case 'Enter': {
-                // Simular click, pero evitar la parte del switch
-                const switchEl = focused.querySelector('.ep-switch');
-                if (document.activeElement === switchEl) return false;
-                focused.click();
+                // Reproducir el episodio
+                const s = +focused.dataset.s, epNum = +focused.dataset.e;
+                playEpisode(s, epNum);
                 return true;
             }
             case 'back':
@@ -2249,7 +2346,7 @@ document.addEventListener('webkitfullscreenchange', () => {
     }
 
     // ── Navegación en el player (header/footer) ────────────
-    let _playerFocusZone = 'video'; // 'video' | 'header' | 'footer'
+    let _playerFocusZone = 'video'; // 'video' | 'header' | 'footer' | 'wolf-controls'
 
     function navigatePlayer(key) {
         const playerSection = document.getElementById('player-section');
@@ -2269,11 +2366,30 @@ document.addEventListener('webkitfullscreenchange', () => {
                 return style.display !== 'none' && style.visibility !== 'hidden';
             });
 
+        // Botones de Wolf Player (controles inferiores)
+        const wolfControlBtns = Array.from(document.querySelectorAll(
+            '#playerContainer .opt-btn, ' +
+            '#playerContainer .ctrl-btn, ' +
+            '#playerContainer .adapt-btn, ' +
+            '#playerContainer button:not(.modal-close)'
+        )).filter(b => {
+            if (!b || b.offsetParent === null) return false;
+            const style = window.getComputedStyle(b);
+            if (style.display === 'none' || style.visibility === 'hidden') return false;
+            // Excluir botones dentro de modales cerrados
+            const modal = b.closest('.modal-overlay, .modal');
+            if (modal && !modal.classList.contains('open')) return false;
+            return true;
+        });
+
         const focused = document.activeElement;
         const inHeader = focused && playerSection.querySelector('#player-header') &&
                           playerSection.querySelector('#player-header').contains(focused);
         const inFooter = focused && playerSection.querySelector('#player-footer') &&
                           playerSection.querySelector('#player-footer').contains(focused);
+        
+        // Detectar si el foco está en un botón de Wolf Player
+        const inWolfControls = focused && wolfControlBtns.includes(focused);
         
         // Detectar si el foco está en el Wolf Player (video o controles internos)
         const wolfPlayerContainer = document.getElementById('playerContainer') || 
@@ -2287,7 +2403,59 @@ document.addEventListener('webkitfullscreenchange', () => {
             focused.closest('#player-wrap')
         );
 
-        const inPlayer = !inHeader && !inFooter;
+        const inPlayer = !inHeader && !inFooter && !inWolfControls;
+
+        // Si el foco está en un botón de Wolf Player
+        if (inWolfControls) {
+            const idx = wolfControlBtns.indexOf(focused);
+            switch (key) {
+                case 'ArrowLeft': {
+                    const prev = wolfControlBtns[idx - 1];
+                    if (prev) {
+                        prev.focus();
+                        return true;
+                    }
+                    return false;
+                }
+                case 'ArrowRight': {
+                    const next = wolfControlBtns[idx + 1];
+                    if (next) {
+                        next.focus();
+                        return true;
+                    }
+                    return false;
+                }
+                case 'ArrowUp': {
+                    // Subir al header
+                    if (headerBtns.length) {
+                        _playerFocusZone = 'header';
+                        headerBtns[0].focus();
+                        return true;
+                    }
+                    // O volver al player
+                    _playerFocusZone = 'video';
+                    if (wolfPlayerContainer) {
+                        wolfPlayerContainer.focus();
+                        return true;
+                    }
+                    return false;
+                }
+                case 'ArrowDown': {
+                    // Bajar al footer si existe
+                    if (footerBtns.length) {
+                        _playerFocusZone = 'footer';
+                        footerBtns[0].focus();
+                        return true;
+                    }
+                    return false;
+                }
+                case 'ok':
+                case 'Enter':
+                    // Activar el botón
+                    focused.click();
+                    return true;
+            }
+        }
 
         // Si el foco está en el player (video), controles de video con D-pad
         if (inPlayer || inWolfPlayer) {
@@ -2301,7 +2469,19 @@ document.addEventListener('webkitfullscreenchange', () => {
                     }
                     return false;
                 case 'ArrowDown':
-                    // Bajar → ir al footer
+                    // Bajar → ir a controles de Wolf Player primero
+                    if (wolfControlBtns.length) {
+                        _playerFocusZone = 'wolf-controls';
+                        // Enfocar el botón de play (centro) o el primero disponible
+                        const playBtn = wolfControlBtns.find(b => b.id === 'btnPlay');
+                        if (playBtn) {
+                            playBtn.focus();
+                        } else {
+                            wolfControlBtns[0].focus();
+                        }
+                        return true;
+                    }
+                    // Si no hay controles de Wolf Player, ir al footer
                     if (footerBtns.length) {
                         _playerFocusZone = 'footer';
                         footerBtns[0].focus();
@@ -2380,6 +2560,17 @@ document.addEventListener('webkitfullscreenchange', () => {
                     return false;
                 }
                 case 'ArrowUp':
+                    // Subir → si hay controles de Wolf Player, ir ahí, sino al player
+                    if (wolfControlBtns.length) {
+                        _playerFocusZone = 'wolf-controls';
+                        const playBtn = wolfControlBtns.find(b => b.id === 'btnPlay');
+                        if (playBtn) {
+                            playBtn.focus();
+                        } else {
+                            wolfControlBtns[0].focus();
+                        }
+                        return true;
+                    }
                     // Volver al player
                     _playerFocusZone = 'video';
                     if (wolfInstance && wolfInstance.playerContainer) {
@@ -2493,21 +2684,6 @@ document.addEventListener('webkitfullscreenchange', () => {
         // No interferir con inputs de texto
         if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
 
-        // Si el foco está en un botón o control DENTRO de Wolf Player, dejar que Wolf Player lo maneje
-        const focused = document.activeElement;
-        const insideWolfPlayer = focused && (
-            focused.closest('#playerContainer') ||
-            focused.id === 'playerContainer' ||
-            (focused.tagName === 'BUTTON' && focused.closest('.wolf-controls')) ||
-            (focused.tagName === 'BUTTON' && focused.closest('.controls-bar'))
-        );
-
-        // Si estamos dentro de los controles de Wolf Player y es OK/Enter, dejar pasar
-        if (insideWolfPlayer && (e.key === 'Enter' || e.code === 'Enter' || e.code === 'NumpadEnter')) {
-            // Permitir que el botón se active normalmente
-            return;
-        }
-
         const rawKey = REMOTE_KEY_MAP[e.key] || REMOTE_KEY_MAP[e.code] || e.key || e.code;
         const zone = getActiveZone();
         let handled = false;
@@ -2603,13 +2779,18 @@ document.addEventListener('webkitfullscreenchange', () => {
                     const pc = document.getElementById('playerContainer');
                     if (pc && !pc.getAttribute('tabindex')) {
                         pc.setAttribute('tabindex', '0');
+                        // Hacer focusables los botones de Wolf Player
+                        setTimeout(() => {
+                            makeCardsFocusable();
+                            console.log('🎮 Botones de Wolf Player configurados para navegación');
+                        }, 100);
                         // Si el player está visible, darle foco
                         const ps = document.getElementById('player-section');
                         if (ps && ps.style.display !== 'none') {
                             setTimeout(() => {
                                 pc.focus();
                                 console.log('🎯 Wolf Player cargado - foco establecido');
-                            }, 200);
+                            }, 300);
                         }
                     }
                 }
@@ -2617,6 +2798,26 @@ document.addEventListener('webkitfullscreenchange', () => {
         });
     });
     bodyObserver.observe(document.body, { childList: true, subtree: true });
+
+    // Observer adicional para cuando se muestran los controles de Wolf Player
+    const wolfControlsObserver = new MutationObserver(() => {
+        // Re-aplicar focusable a los botones cuando los controles se muestran
+        const controls = document.querySelector('#playerContainer .controls');
+        if (controls) {
+            makeCardsFocusable();
+        }
+    });
+    
+    // Observar cambios en el playerContainer si ya existe
+    const existingContainer = document.getElementById('playerContainer');
+    if (existingContainer) {
+        wolfControlsObserver.observe(existingContainer, { 
+            attributes: true, 
+            attributeFilter: ['class', 'style'],
+            subtree: true,
+            childList: true
+        });
+    }
 
     // Cuando se abra un modal de resume, enfocar el botón "Continuar"
     const resumeOverlay = document.getElementById('vp-resume-overlay');
