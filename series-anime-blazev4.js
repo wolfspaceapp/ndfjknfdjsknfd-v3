@@ -1931,3 +1931,532 @@ document.addEventListener('webkitfullscreenchange', () => {
         window._pendingFullscreen = false;
     }
 });
+
+
+// ═══════════════════════════════════════════════════════════
+// SOPORTE SMART TV — NAVEGACIÓN CON CONTROL REMOTO D-PAD
+// Compatible con: Samsung Tizen, LG webOS, Android TV,
+//                 Amazon Fire TV, Hisense VIDAA, Philips
+// ═══════════════════════════════════════════════════════════
+(function () {
+    // ── Detección de Smart TV ──────────────────────────────
+    const isSmartTV = (function () {
+        const ua = navigator.userAgent.toLowerCase();
+        return (
+            /tizen|webos|netcast|viera|hbbtv|smarttv|smart-tv|philipstv|vidaa|firetv|fire_tv|silk|aftt|aftm|aftb|kfire/i.test(ua) ||
+            /googletv|crkey|chromecast|appletv|rokuplayer|nettv/i.test(ua) ||
+            (navigator.maxTouchPoints === 0 && !/mobile|tablet/i.test(ua) && window.screen.width >= 1280)
+        );
+    })();
+
+    // Forzar detección si se añade ?tv=1 a la URL (útil para pruebas)
+    const forcedTV = new URLSearchParams(location.search).get('tv') === '1';
+    const TV_MODE = isSmartTV || forcedTV;
+
+    if (TV_MODE) {
+        document.documentElement.setAttribute('data-tv', '1');
+    }
+
+    // ── Funciones puente para WolfPlayer ──────────────────
+    window._wolfTV_nextEpisode = () => {
+        const btn = document.getElementById('btn-next');
+        if (btn && !btn.disabled && btn.style.display !== 'none') btn.click();
+    };
+    window._wolfTV_prevEpisode = () => {
+        const btn = document.getElementById('btn-prev');
+        if (btn && !btn.disabled && btn.style.display !== 'none') btn.click();
+    };
+    window._wolfTV_back = () => {
+        const playerSection = document.getElementById('player-section');
+        if (playerSection && playerSection.style.display !== 'none') {
+            closePlayer();
+        } else {
+            history.back();
+        }
+    };
+
+    // ── Utilidad: todos los elementos focusables de TV ────
+    const TV_FOCUSABLE = [
+        'button:not([disabled]):not([style*="display: none"]):not([style*="display:none"])',
+        'a[href]',
+        '[tabindex]:not([tabindex="-1"])',
+        '.ep-card',
+        '.season-tab',
+    ].join(', ');
+
+    function getFocusableElements(container) {
+        return Array.from((container || document).querySelectorAll(TV_FOCUSABLE))
+            .filter(el => {
+                if (el.offsetParent === null) return false;
+                const style = window.getComputedStyle(el);
+                return style.visibility !== 'hidden' && style.display !== 'none' && style.opacity !== '0';
+            });
+    }
+
+    // Hacer .ep-card y .season-tab focusables vía teclado
+    function makeCardsFocusable() {
+        document.querySelectorAll('.ep-card, .season-tab').forEach(el => {
+            if (!el.getAttribute('tabindex')) el.setAttribute('tabindex', '0');
+        });
+    }
+
+    // ── Contextos de navegación ────────────────────────────
+    // La pantalla se divide en zonas lógicas:
+    // 1. "episodios"   → lista de .ep-card
+    // 2. "tabs"        → .season-tab
+    // 3. "player"      → header/footer del reproductor
+    // 4. "modal"       → cualquier modal abierto
+
+    function getActiveZone() {
+        const playerSection = document.getElementById('player-section');
+        const playerVisible = playerSection && playerSection.style.display !== 'none';
+
+        if (playerVisible) {
+            // ¿Hay un modal visible?
+            const resumeOverlay = document.getElementById('vp-resume-overlay');
+            if (resumeOverlay && resumeOverlay.classList.contains('show')) return 'modal-resume';
+            const reportOverlay = document.getElementById('report-modal-overlay');
+            if (reportOverlay && reportOverlay.style.display === 'flex') return 'modal-report';
+            const optionsOverlay = document.getElementById('serie-options-overlay');
+            if (optionsOverlay && optionsOverlay.style.display === 'flex') return 'modal-options';
+            // ¿fsOverlay de autoplay?
+            if (document.querySelector('.autoplay-fs-overlay')) return 'modal-autoplay';
+            return 'player';
+        }
+
+        return 'episodes';
+    }
+
+    // ── Navegación en lista de episodios (grid) ────────────
+    function navigateEpisodes(key) {
+        makeCardsFocusable();
+        const cards = Array.from(document.querySelectorAll('.ep-card')).filter(c => c.offsetParent !== null);
+        if (!cards.length) return;
+
+        let focused = document.activeElement;
+        let idx = cards.indexOf(focused);
+
+        // Si no hay card enfocada, poner foco en la primera
+        if (idx === -1) {
+            // Ver si hay alguna pestaña de tab enfocada
+            const tabFocused = document.activeElement && document.activeElement.classList.contains('season-tab');
+            if (tabFocused && (key === 'ArrowDown' || key === 'ok')) {
+                cards[0].focus();
+                return true;
+            }
+            cards[0].focus();
+            return true;
+        }
+
+        // Calcular cuántas columnas hay por fila (diseño CSS grid/flex)
+        const firstRect = cards[0].getBoundingClientRect();
+        const cardsPerRow = cards.filter(c => Math.abs(c.getBoundingClientRect().top - firstRect.top) < 10).length || 1;
+
+        switch (key) {
+            case 'ArrowDown': {
+                const next = cards[idx + cardsPerRow] || cards[cards.length - 1];
+                next.focus();
+                next.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+                return true;
+            }
+            case 'ArrowUp': {
+                if (idx < cardsPerRow) {
+                    // Subir a las tabs de temporadas
+                    const activTab = document.querySelector('.season-tab.active') || document.querySelector('.season-tab');
+                    if (activTab) { activTab.focus(); return true; }
+                    return false;
+                }
+                const prev = cards[idx - cardsPerRow];
+                if (prev) { prev.focus(); prev.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }
+                return true;
+            }
+            case 'ArrowLeft': {
+                const prev = cards[idx - 1];
+                if (prev) { prev.focus(); prev.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }
+                return true;
+            }
+            case 'ArrowRight': {
+                const next = cards[idx + 1];
+                if (next) { next.focus(); next.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }
+                return true;
+            }
+            case 'ok':
+            case 'Enter': {
+                // Simular click, pero evitar la parte del switch
+                const switchEl = focused.querySelector('.ep-switch');
+                if (document.activeElement === switchEl) return false;
+                focused.click();
+                return true;
+            }
+            case 'back':
+            case 'Escape': {
+                history.back();
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // ── Navegación en tabs de temporadas ──────────────────
+    function navigateTabs(key) {
+        const tabs = Array.from(document.querySelectorAll('.season-tab')).filter(t => t.offsetParent !== null);
+        if (!tabs.length) return false;
+
+        let focused = document.activeElement;
+        let idx = tabs.indexOf(focused);
+
+        if (idx === -1) {
+            if (key === 'ArrowUp') {
+                // Ya estamos arriba
+                return false;
+            }
+            tabs[0].focus();
+            return true;
+        }
+
+        switch (key) {
+            case 'ArrowLeft': {
+                const prev = tabs[idx - 1];
+                if (prev) prev.focus();
+                return true;
+            }
+            case 'ArrowRight': {
+                const next = tabs[idx + 1];
+                if (next) next.focus();
+                return true;
+            }
+            case 'ArrowDown': {
+                // Bajar a la lista de episodios
+                const firstCard = document.querySelector('.ep-card');
+                if (firstCard) { firstCard.focus(); firstCard.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }
+                return true;
+            }
+            case 'ok':
+            case 'Enter':
+                focused.click();
+                return true;
+        }
+        return false;
+    }
+
+    // ── Navegación en el player (header/footer) ────────────
+    let _playerFocusZone = 'video'; // 'video' | 'header' | 'footer'
+
+    function navigatePlayer(key) {
+        const playerSection = document.getElementById('player-section');
+        if (!playerSection) return false;
+
+        const headerBtns = Array.from(playerSection.querySelectorAll('#player-header button:not([disabled])'))
+            .filter(b => b.offsetParent !== null);
+        const footerBtns = Array.from(playerSection.querySelectorAll('#player-footer button:not([disabled])'))
+            .filter(b => b.offsetParent !== null);
+
+        const focused = document.activeElement;
+        const inHeader = focused && playerSection.querySelector('#player-header') &&
+                          playerSection.querySelector('#player-header').contains(focused);
+        const inFooter = focused && playerSection.querySelector('#player-footer') &&
+                          playerSection.querySelector('#player-footer').contains(focused);
+        const inPlayer = !inHeader && !inFooter;
+
+        // Si el foco está en el player (video), controles de video con D-pad
+        if (inPlayer) {
+            switch (key) {
+                case 'ArrowUp':
+                    // Subir → ir al header
+                    if (headerBtns.length) {
+                        _playerFocusZone = 'header';
+                        headerBtns[0].focus();
+                        return true;
+                    }
+                    return false;
+                case 'ArrowDown':
+                    // Bajar → ir al footer
+                    if (footerBtns.length) {
+                        _playerFocusZone = 'footer';
+                        footerBtns[0].focus();
+                        return true;
+                    }
+                    return false;
+                // Los otros casos (Izq/Der/OK) los maneja WolfPlayer
+                default:
+                    return false;
+            }
+        }
+
+        if (inHeader) {
+            const idx = headerBtns.indexOf(focused);
+            switch (key) {
+                case 'ArrowLeft': {
+                    const prev = headerBtns[idx - 1];
+                    if (prev) prev.focus();
+                    return true;
+                }
+                case 'ArrowRight': {
+                    const next = headerBtns[idx + 1];
+                    if (next) next.focus();
+                    return true;
+                }
+                case 'ArrowDown':
+                    // Volver al player
+                    _playerFocusZone = 'video';
+                    if (wolfInstance && wolfInstance.playerContainer) {
+                        wolfInstance.playerContainer.focus();
+                    } else {
+                        const pw = document.getElementById('player-wrap');
+                        if (pw) pw.focus();
+                    }
+                    return true;
+                case 'ok':
+                case 'Enter':
+                    focused.click();
+                    return true;
+            }
+        }
+
+        if (inFooter) {
+            const idx = footerBtns.indexOf(focused);
+            switch (key) {
+                case 'ArrowLeft': {
+                    const prev = footerBtns[idx - 1];
+                    if (prev) prev.focus();
+                    return true;
+                }
+                case 'ArrowRight': {
+                    const next = footerBtns[idx + 1];
+                    if (next) next.focus();
+                    return true;
+                }
+                case 'ArrowUp':
+                    // Volver al player
+                    _playerFocusZone = 'video';
+                    if (wolfInstance && wolfInstance.playerContainer) {
+                        wolfInstance.playerContainer.focus();
+                    } else {
+                        const pw = document.getElementById('player-wrap');
+                        if (pw) pw.focus();
+                    }
+                    return true;
+                case 'ok':
+                case 'Enter':
+                    focused.click();
+                    return true;
+            }
+        }
+
+        return false;
+    }
+
+    // ── Navegación en modales ──────────────────────────────
+    function navigateModal(zone, key) {
+        let btns = [];
+        if (zone === 'modal-resume') {
+            btns = Array.from(document.querySelectorAll('#vp-resume-overlay button'));
+        } else if (zone === 'modal-autoplay') {
+            btns = Array.from(document.querySelectorAll('.autoplay-fs-overlay button, #fs-cancel-btn'));
+        } else if (zone === 'modal-report') {
+            btns = Array.from(document.querySelectorAll('#report-modal-overlay button:not([disabled])'));
+        } else if (zone === 'modal-options') {
+            btns = Array.from(document.querySelectorAll('#serie-options-overlay button:not([disabled])'));
+        }
+        btns = btns.filter(b => b.offsetParent !== null);
+        if (!btns.length) return false;
+
+        const focused = document.activeElement;
+        let idx = btns.indexOf(focused);
+
+        // Si ningún botón tiene foco, enfocar el primero
+        if (idx === -1) { btns[0].focus(); return true; }
+
+        switch (key) {
+            case 'ArrowLeft':
+            case 'ArrowUp': {
+                const prev = btns[(idx - 1 + btns.length) % btns.length];
+                prev.focus();
+                return true;
+            }
+            case 'ArrowRight':
+            case 'ArrowDown': {
+                const next = btns[(idx + 1) % btns.length];
+                next.focus();
+                return true;
+            }
+            case 'ok':
+            case 'Enter':
+                focused.click();
+                return true;
+            case 'back':
+            case 'Escape': {
+                // Cancelar modal
+                const cancelBtn = document.querySelector(
+                    '#vp-resume-overlay .vp-resume-no, ' +
+                    '#fs-cancel-btn, ' +
+                    '#report-modal-close, ' +
+                    '#serie-options-close'
+                );
+                if (cancelBtn) cancelBtn.click();
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // ── Mapeo de teclas físicas del control remoto ─────────
+    const REMOTE_KEY_MAP = {
+        // D-Pad
+        'ArrowUp': 'ArrowUp',
+        'ArrowDown': 'ArrowDown',
+        'ArrowLeft': 'ArrowLeft',
+        'ArrowRight': 'ArrowRight',
+        // OK / Select
+        'Enter': 'ok',
+        'NumpadEnter': 'ok',
+        // Atrás
+        'Escape': 'back',
+        'GoBack': 'back',
+        'BrowserBack': 'back',
+        // Tizen Samsung
+        'Return': 'back',
+        // Otros
+        'MediaPlayPause': 'playpause',
+        'MediaPlay': 'playpause',
+        'MediaPause': 'playpause',
+        'MediaStop': 'stop',
+        'MediaFastForward': 'fwd',
+        'MediaRewind': 'rwd',
+        'MediaTrackNext': 'next',
+        'MediaTrackPrevious': 'prev',
+    };
+
+    // ── Manejador principal de D-Pad ───────────────────────
+    document.addEventListener('keydown', (e) => {
+        // No interferir con inputs de texto
+        if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
+
+        const rawKey = REMOTE_KEY_MAP[e.key] || REMOTE_KEY_MAP[e.code] || e.key || e.code;
+        const zone = getActiveZone();
+        let handled = false;
+
+        // Teclas de media → siempre van al player si está activo
+        if (['playpause', 'stop', 'fwd', 'rwd', 'next', 'prev'].includes(rawKey)) {
+            if (zone === 'player') {
+                // WolfPlayer las gestiona, dejar pasar
+                return;
+            }
+            if (rawKey === 'next') { window._wolfTV_nextEpisode(); e.preventDefault(); return; }
+            if (rawKey === 'prev') { window._wolfTV_prevEpisode(); e.preventDefault(); return; }
+            return;
+        }
+
+        switch (zone) {
+            case 'player':
+                handled = navigatePlayer(rawKey);
+                break;
+            case 'modal-resume':
+            case 'modal-report':
+            case 'modal-options':
+            case 'modal-autoplay':
+                handled = navigateModal(zone, rawKey);
+                break;
+            case 'episodes': {
+                const tabFocused = document.activeElement && document.activeElement.classList.contains('season-tab');
+                if (tabFocused) {
+                    handled = navigateTabs(rawKey);
+                } else {
+                    handled = navigateEpisodes(rawKey);
+                }
+                // Back en episodios → ir atrás
+                if (!handled && (rawKey === 'back' || rawKey === 'Escape')) {
+                    history.back();
+                    handled = true;
+                }
+                break;
+            }
+        }
+
+        if (handled) e.preventDefault();
+    }, { capture: true });
+
+    // ── Inicializar foco al entrar en cada zona ────────────
+    // Cuando se abre el player, poner foco en el contenedor del player
+    const _origPlayEpisode = window.playEpisode || null;
+    // Hook: cuando el player-section se muestre, enfocar el area del video
+    const _playerSectionObserver = new MutationObserver(() => {
+        const ps = document.getElementById('player-section');
+        if (ps && ps.style.display !== 'none') {
+            // Pequeño delay para que el DOM se estabilice
+            setTimeout(() => {
+                const pw = document.getElementById('player-wrap');
+                if (pw) {
+                    if (!pw.getAttribute('tabindex')) pw.setAttribute('tabindex', '0');
+                    pw.focus();
+                }
+            }, 300);
+        } else if (ps && ps.style.display === 'none') {
+            // Player cerrado → volver foco a episodios
+            setTimeout(() => {
+                makeCardsFocusable();
+                const lastCard = document.querySelector('.ep-card.last-played') ||
+                                  document.querySelector('.ep-card');
+                if (lastCard) lastCard.focus();
+            }, 100);
+        }
+    });
+
+    const playerSection = document.getElementById('player-section');
+    if (playerSection) {
+        _playerSectionObserver.observe(playerSection, { attributes: true, attributeFilter: ['style'] });
+    }
+
+    // Cuando se abra un modal de resume, enfocar el botón "Continuar"
+    const resumeOverlay = document.getElementById('vp-resume-overlay');
+    if (resumeOverlay) {
+        new MutationObserver(() => {
+            if (resumeOverlay.classList.contains('show')) {
+                setTimeout(() => {
+                    const yesBtn = resumeOverlay.querySelector('.vp-resume-yes');
+                    if (yesBtn) yesBtn.focus();
+                }, 50);
+            }
+        }).observe(resumeOverlay, { attributes: true, attributeFilter: ['class'] });
+    }
+
+    // Al cargar, hacer tabs y cards focusables
+    makeCardsFocusable();
+    // Observar cambios en episodes-list para re-aplicar tabindex
+    const epsList = document.getElementById('episodes-list');
+    if (epsList) {
+        new MutationObserver(makeCardsFocusable).observe(epsList, { childList: true });
+    }
+    const seasonTabs = document.getElementById('seasons-tabs');
+    if (seasonTabs) {
+        new MutationObserver(makeCardsFocusable).observe(seasonTabs, { childList: true });
+    }
+
+    // ── Barra de ayuda de control remoto (solo modo TV) ────
+    if (TV_MODE) {
+        const helpBar = document.createElement('div');
+        helpBar.id = 'tv-help-bar';
+        helpBar.innerHTML = `
+            <span>↑↓←→ Navegar</span>
+            <span>OK Seleccionar</span>
+            <span>⏪ −10s</span>
+            <span>⏩ +10s</span>
+            <span>⏮⏭ Episodio</span>
+            <span>Back Volver</span>
+        `;
+        document.body.appendChild(helpBar);
+
+        // Auto-ocultar tras 5 segundos
+        let helpTimer = setTimeout(() => helpBar.classList.add('hidden'), 5000);
+        document.addEventListener('keydown', () => {
+            helpBar.classList.remove('hidden');
+            clearTimeout(helpTimer);
+            helpTimer = setTimeout(() => helpBar.classList.add('hidden'), 4000);
+        });
+    }
+
+    // ── Registro de modo TV en consola ─────────────────────
+    if (TV_MODE) {
+        console.log('📺 Wolf TV Mode activado — Navegación por control remoto habilitada');
+    }
+})();
