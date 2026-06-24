@@ -1366,6 +1366,26 @@ body {
   stroke: var(--accent) !important;
 }
 
+/* ── Botones del header de la serie en foco TV ───────────*/
+[data-tv="1"] #serie-header button:focus,
+#serie-header button:focus-visible,
+[data-tv="1"] .back-btn:focus,
+.back-btn:focus-visible,
+[data-tv="1"] .cfg-btn:focus,
+.cfg-btn:focus-visible {
+  outline: 3px solid var(--accent) !important;
+  outline-offset: 3px !important;
+  background: rgba(255, 170, 0, 0.18) !important;
+  color: var(--accent) !important;
+  transform: scale(1.1) !important;
+  z-index: 10;
+}
+
+[data-tv="1"] #serie-header button:focus svg,
+#serie-header button:focus-visible svg {
+  stroke: var(--accent) !important;
+}
+
 /* ── Player wrap en foco TV ──────────────────────────────*/
 #player-wrap:focus,
 #playerContainer:focus {
@@ -1430,6 +1450,21 @@ body {
   outline: 3px solid var(--accent) !important;
   outline-offset: 4px !important;
   transform: scale(1.05) !important;
+}
+
+/* ── Modal buttons (report, options, cast) ────────────────*/
+[data-tv="1"] #report-modal-overlay button:focus,
+#report-modal-overlay button:focus-visible,
+[data-tv="1"] #serie-options-overlay button:focus,
+#serie-options-overlay button:focus-visible,
+[data-tv="1"] #cast-modal button:focus,
+#cast-modal button:focus-visible,
+[data-tv="1"] #cast-modal a:focus,
+#cast-modal a:focus-visible {
+  outline: 3px solid var(--accent) !important;
+  outline-offset: 3px !important;
+  transform: scale(1.04) !important;
+  background: rgba(255, 170, 0, 0.15) !important;
 }
 
 /* ── Barra de ayuda de control remoto (eliminada) ─────────
