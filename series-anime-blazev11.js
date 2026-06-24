@@ -1308,18 +1308,51 @@ function buildVideoPlayer(wrap, url, poster, videoType, mainLoader, server, requ
             const v = container.querySelector('video');
             if (v) {
 
+                let errorCount = 0;
+                let lastErrorTime = 0;
+                
                 v.addEventListener('error', (e) => {
                     if (requestId && requestId !== renderCount) return;
                     
                     const errCode = v.error ? v.error.code : 0;
-                    if (errCode !== 4) {
+                    const now = Date.now();
+                    
+                    // Ignorar errores transitorios (código 1: abortado por usuario)
+                    if (errCode === 1) {
                         console.warn(`⚠️ Ignorando error transitorio en video (código ${errCode}).`);
                         return;
                     }
                     
-                    console.error('❌ Error fatal en video (SRC_NOT_SUPPORTED):', e, v.error);
+                    // Para errores de red (código 2), verificar si es transitorio por seeking
+                    if (errCode === 2) {
+                        // Resetear contador si han pasado más de 3 segundos desde el último error
+                        if (now - lastErrorTime > 3000) {
+                            errorCount = 0;
+                        }
+                        
+                        errorCount++;
+                        lastErrorTime = now;
+                        
+                        // Si es el primer o segundo error de red, es probablemente por seeking
+                        if (errorCount <= 2) {
+                            console.warn(`⚠️ Error de red transitorio durante seeking (intento ${errorCount}/2).`);
+                            return;
+                        }
+                        
+                        // Si hay más de 2 errores seguidos, es un problema real
+                        console.error('❌ Error de red persistente al cargar el video:', e, v.error);
+                    } else {
+                        // Para otros errores (código 3: decodificación, código 4: formato)
+                        const errorMessages = {
+                            3: 'Error al decodificar el video',
+                            4: 'Formato de video no soportado'
+                        };
+                        const errorMsg = errorMessages[errCode] || 'Error al cargar el video';
+                        console.error(`❌ ${errorMsg} (código ${errCode}):`, e, v.error);
+                    }
 
-                    if (server && server.url) {
+                    // Solo hacer fallback si hay múltiples errores o es error fatal
+                    if (server && server.url && (errCode !== 2 || errorCount > 2)) {
                         const fallbackUrl = (url !== server.url) ? server.url : url;
                         console.warn('⚠️ Fallback a iframe:', fallbackUrl);
                         wrap.innerHTML = '';
@@ -1328,14 +1361,27 @@ function buildVideoPlayer(wrap, url, poster, videoType, mainLoader, server, requ
                         return;
                     }
 
-                    hideLoader();
-                    wrap.innerHTML = `<div class="player-placeholder">
-                      <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                        <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
-                      </svg>
-                      <p>Error al cargar el video</p>
-                      <small>El formato no es soportado o el servidor rechazó la conexión. Intenta con otro servidor.</small>
-                    </div>`;
+                    // Solo mostrar error fatal si es persistente
+                    if (errCode !== 2 || errorCount > 2) {
+                        hideLoader();
+                        const errorMsg = errCode === 2 ? 'Error de red al cargar el video' : 
+                                       errCode === 3 ? 'Error al decodificar el video' : 
+                                       errCode === 4 ? 'Formato de video no soportado' : 
+                                       'Error al cargar el video';
+                        wrap.innerHTML = `<div class="player-placeholder">
+                          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                            <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+                          </svg>
+                          <p>${errorMsg}</p>
+                          <small>El formato no es soportado o el servidor rechazó la conexión. Intenta con otro servidor.</small>
+                        </div>`;
+                    }
+                });
+                
+                // Resetear contador de errores cuando el video se reproduce correctamente
+                v.addEventListener('playing', () => {
+                    errorCount = 0;
+                    lastErrorTime = 0;
                 });
 
                 let saveInterval = null;
