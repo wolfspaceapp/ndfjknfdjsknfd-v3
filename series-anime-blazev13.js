@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════
-// SISTEMA INTEGRADO DE SERIES CON REPRODUCTOR
+// SISTEMA INTEGRADO DE SERIES CON REPRODUCTOR (CORREGIDO)
 // ═══════════════════════════════════════════════════════════
 
 const WATCHED_KEY = 'watched_' + SERIE.id;
@@ -15,45 +15,32 @@ let resumeToastShown = false;
 const GLOBAL_IS_MOBILE = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
 
 // ── Interceptor para control de navegación en Wolf Player ────
-// Deshabilita volumen con flechas ↑↓ y seek con ← → a menos que estés en la barra de progreso
 (function() {
     document.addEventListener('keydown', (e) => {
         const playerContainer = document.getElementById('playerContainer');
         if (!playerContainer) return;
         
         const focused = document.activeElement;
-        
-        // Detectar si estamos en la barra de progreso
         const inProgressBar = focused && (
             focused.id === 'progressWrap' ||
             focused.closest('#progressWrap') ||
             focused.classList.contains('progress-wrap')
         );
         
-        // Si estamos en el playerContainer (video) o en un elemento sin botón, pero NO en la barra de progreso
         const inPlayerVideo = focused && (
             focused.id === 'playerContainer' ||
             (focused.closest('#playerContainer') && !focused.closest('button') && !inProgressBar)
         );
         
-        // Si estamos en el video (no en barra de progreso) y presionan ArrowUp/ArrowDown
         if (inPlayerVideo && (e.code === 'ArrowUp' || e.code === 'ArrowDown')) {
-            // Prevenir completamente que Wolf Player maneje esto para volumen
             e.preventDefault();
             e.stopImmediatePropagation();
-            // Nuestro sistema de navegación lo manejará
         }
         
-        // Si estamos en el video (no en barra de progreso) y presionan ArrowLeft/ArrowRight
         if (inPlayerVideo && (e.code === 'ArrowLeft' || e.code === 'ArrowRight')) {
-            // Prevenir que Wolf Player haga seek
             e.preventDefault();
             e.stopImmediatePropagation();
-            // Nuestro sistema de navegación lo manejará (o no hará nada)
         }
-        
-        // Si estamos EN la barra de progreso, permitir que Wolf Player maneje ← → para seek
-        // (no hacemos nada aquí, dejamos que el evento pase)
     }, { capture: true });
 })();
 
@@ -124,7 +111,6 @@ function saveProgress(currentTime, duration) {
     if (!key || !duration || currentTime < 5) return;
     if (currentTime / duration > 0.95) {
         localStorage.removeItem(key);
-        // Remove CW metadata if this was the active entry
         try {
             const metaKey = 'cw_meta_' + SERIE.id;
             const existing = JSON.parse(localStorage.getItem(metaKey) || 'null');
@@ -134,8 +120,6 @@ function saveProgress(currentTime, duration) {
     }
     const time = Math.floor(currentTime);
     localStorage.setItem(key, String(time));
-
-    // ── Save Continue Watching metadata for home page slider ──
     updateCWMetadata(currentTime, duration);
 }
 
@@ -246,7 +230,6 @@ function renderEpisodes(animate) {
     </div>`;
     }).join('');
 
-    // Lazy load de thumbs con IntersectionObserver
     list.querySelectorAll('.ep-thumb-img[data-src]').forEach((el, i) => {
         const observer = new IntersectionObserver((entries, obs) => {
             entries.forEach(entry => {
@@ -257,7 +240,6 @@ function renderEpisodes(animate) {
                 const img = new Image();
                 img.onload = img.onerror = () => {
                     el.style.backgroundImage = `url('${src}')`;
-                    // Pequeño delay escalonado para la animación una a una
                     setTimeout(() => el.classList.add('ep-img-loaded'), i * 40);
                 };
                 img.src = src;
@@ -302,14 +284,12 @@ function playEpisode(seasonIdx, epNum, animate = false, isAutoAdvance = false) {
         return;
     }
 
-    // Marcar como visto (Siempre activo por defecto)
     setWatched(seasonIdx, epNum, true);
     const input = document.querySelector(`.ep-switch[data-s="${seasonIdx}"][data-e="${epNum}"] input`);
     if (input) input.checked = true;
     const lbl = $(`lbl-${seasonIdx}-${epNum}`);
     if (lbl) { lbl.textContent = 'Visto'; lbl.classList.add('on'); }
 
-    // Global language persistence
     let prefLang = localStorage.getItem('blaze_preferred_lang');
     if (prefLang) {
         const pIdx = currentEpisode.langs.findIndex(l => l.name === prefLang);
@@ -319,28 +299,16 @@ function playEpisode(seasonIdx, epNum, animate = false, isAutoAdvance = false) {
         activeLang = 0;
     }
 
-    // Server reset on next/episode change
     activeServer = 0;
-    
     window._isAutoplay = isAutoAdvance;
 
-    if (document.fullscreenElement) {
+    if (document.fullscreenElement || document.webkitFullscreenElement) {
         window._pendingFullscreen = true;
     }
 
-    if (window._pendingFullscreen) {
-        const wrap = document.getElementById('player-wrap');
-        if (wrap && wrap.requestFullscreen) {
-            wrap.requestFullscreen().catch(()=>{});
-        }
-    }
-
     resumeToastShown = false;
-
-    // Auto-update Home Slider meta
     updateCWMetadata(0, 0);
 
-    // Cancelar autoplay pendiente
     if (window._autoplayTimer) {
         clearInterval(window._autoplayTimer);
         window._autoplayTimer = null;
@@ -353,42 +321,32 @@ function playEpisode(seasonIdx, epNum, animate = false, isAutoAdvance = false) {
         if (sp) sp.textContent = 'Siguiente';
     }
 
-    // Mostrar reproductor y ocultar interfaz de serie
     $('player-section').style.display = 'flex';
     $('episodes-list').style.display = 'none';
     document.querySelector('.seasons-wrap').style.display = 'none';
     const sHeader = $('serie-header');
     if (sHeader) sHeader.style.display = 'none';
 
-    // Ajustar label del botón cerrar si es película
     const closeBtn = $('btn-close-player');
     if (closeBtn) {
         closeBtn.setAttribute('aria-label', SERIE.type === 'movie' ? 'Volver al catálogo' : 'Volver a episodios');
     }
 
-    // Actualizar título
     if (SERIE.type === 'movie') {
         $('player-ep-title').textContent = currentEpisode.title;
     } else {
         $('player-ep-title').textContent = `Ep. ${epNum} · ${currentEpisode.title}`;
     }
 
-    // Configurar botones de navegación con lógica de temporadas
     const prevBtn = $('btn-prev');
     const nextBtn = $('btn-next');
-
-    // Encontrar índice del episodio actual en el array
     const currentIdx = eps.findIndex(e => e.num === epNum);
 
-    // Buscar episodio anterior
     let prevEp = null;
     let prevSeasonIdx = seasonIdx;
-
     if (currentIdx > 0) {
-        // Hay episodio anterior en esta temporada
         prevEp = eps[currentIdx - 1];
     } else if (seasonIdx > 0) {
-        // Buscar en la temporada anterior
         const prevSeason = SERIE.seasons[seasonIdx - 1];
         if (prevSeason && prevSeason.episodes.length > 0) {
             prevEp = prevSeason.episodes[prevSeason.episodes.length - 1];
@@ -396,15 +354,11 @@ function playEpisode(seasonIdx, epNum, animate = false, isAutoAdvance = false) {
         }
     }
 
-    // Buscar episodio siguiente
     let nextEp = null;
     let nextSeasonIdx = seasonIdx;
-
     if (currentIdx >= 0 && currentIdx < eps.length - 1) {
-        // Hay episodio siguiente en esta temporada
         nextEp = eps[currentIdx + 1];
     } else if (seasonIdx < SERIE.seasons.length - 1) {
-        // Buscar en la siguiente temporada
         const nextSeason = SERIE.seasons[seasonIdx + 1];
         if (nextSeason && nextSeason.episodes.length > 0) {
             nextEp = nextSeason.episodes[0];
@@ -412,13 +366,10 @@ function playEpisode(seasonIdx, epNum, animate = false, isAutoAdvance = false) {
         }
     }
 
-    // Configurar botones
     const isMovie = currentEpisode.type === 'movie';
-
     if (isMovie) {
         if (prevBtn) prevBtn.style.display = 'none';
         if (nextBtn) nextBtn.style.display = 'none';
-        // Si hay un divisor o barra, también podríamos ocultarla si tuviera ID/clase
     } else {
         if (prevBtn) {
             prevBtn.style.display = prevEp ? '' : 'none';
@@ -430,13 +381,8 @@ function playEpisode(seasonIdx, epNum, animate = false, isAutoAdvance = false) {
         }
     }
 
-    prevBtn.onclick = () => {
-        if (prevEp) playEpisode(prevSeasonIdx, prevEp.num, true);
-    };
-
-    nextBtn.onclick = () => {
-        if (nextEp) playEpisode(nextSeasonIdx, nextEp.num, true);
-    };
+    prevBtn.onclick = () => { if (prevEp) playEpisode(prevSeasonIdx, prevEp.num, true); };
+    nextBtn.onclick = () => { if (nextEp) playEpisode(nextSeasonIdx, nextEp.num, true); };
 
     updateLabels();
     renderPlayer(animate);
@@ -460,16 +406,15 @@ function closePlayer() {
         wolfInstance = null;
     }
 
-    // Detener cualquier video residual
     const residualVideos = $('player-wrap').querySelectorAll('video');
     residualVideos.forEach(v => { v.pause(); v.src = ''; v.load(); v.remove(); });
 
-    // Cancelar autoplay pendiente
     if (window._autoplayTimer) {
         clearInterval(window._autoplayTimer);
         window._autoplayTimer = null;
     }
     document.querySelectorAll('.autoplay-fs-overlay').forEach(el => el.remove());
+    
     const nb2 = document.getElementById('btn-next');
     if (nb2) {
         nb2.classList.remove('autoplay-loading');
@@ -479,20 +424,14 @@ function closePlayer() {
 
     $('player-wrap').innerHTML = '';
     currentEpisode = null;
-    renderCount++; // Invalidar cualquier carga asíncrona en curso
+    renderCount++;
 }
 
 function updateLabels() {
     if (!currentEpisode) return;
-    if (!currentEpisode.langs || !currentEpisode.langs[activeLang]) {
-        console.error('Error: idioma no disponible', activeLang);
-        return;
-    }
+    if (!currentEpisode.langs || !currentEpisode.langs[activeLang]) return;
     const lang = currentEpisode.langs[activeLang];
-    if (!lang.servers || !lang.servers[activeServer]) {
-        console.error('Error: servidor no disponible', activeServer);
-        return;
-    }
+    if (!lang.servers || !lang.servers[activeServer]) return;
     $('btn-lang-label').textContent = lang.name;
     $('btn-srv-label').textContent = lang.servers[activeServer].name;
 }
@@ -550,7 +489,6 @@ function createLoadingOverlay(parent) {
     };
 }
 
-// ── Utilidades de detección y desofuscación ──────────────
 const DESKTOP_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
 
 const CORS_PROXIES = [
@@ -565,10 +503,6 @@ const CORS_PROXIES = [
 
 function proxyFetch(url, timeoutMs) {
     if (!GLOBAL_IS_MOBILE) {
-        console.log('WOLF_INTERCEPT_URL:', url);
-        console.log('🚀 [Direct Fetch] Desktop detected, bypassing proxy:', url);
-
-        // Bridge para Electron: si existe ipcRenderer, esperamos la respuesta del proceso Main
         if (window.ipcRenderer) {
             return new Promise((resolve) => {
                 const handler = (event, res) => {
@@ -578,35 +512,27 @@ function proxyFetch(url, timeoutMs) {
                     }
                 };
                 ipcRenderer.on('proxy-response', handler);
-                // Fallback temporal si Electron tarda mucho
                 setTimeout(() => {
                     ipcRenderer.removeListener('proxy-response', handler);
                     fetchDirect(url, timeoutMs).then(resolve).catch(() => resolve({ contents: '' }));
                 }, 10000);
             });
         }
-
         return fetchDirect(url, timeoutMs);
     }
 
-    console.log('🌐 [Proxy Fetch] Mobile detected, using proxy for:', url);
     const opts = timeoutMs ? { signal: AbortSignal.timeout(timeoutMs) } : {};
     const tryProxy = (idx) => {
         if (idx >= CORS_PROXIES.length) return Promise.reject(new Error('Todos los proxies fallaron'));
         const proxyUrl = CORS_PROXIES[idx](url);
-        if (!proxyUrl) {
-            console.warn(`⚠️ Proxy ${idx + 1} omitido (sin URL) → siguiente...`);
-            return tryProxy(idx + 1);
-        }
+        if (!proxyUrl) return tryProxy(idx + 1);
+        
         return fetch(proxyUrl, opts)
             .then(r => {
                 if (!r.ok) throw new Error('HTTP ' + r.status);
                 return r.json().catch(() => r.text().then(t => ({ contents: t })));
             })
-            .catch(e => {
-                console.warn(`⚠️ Proxy ${idx + 1} falló:`, e.message, '→ intentando siguiente...');
-                return tryProxy(idx + 1);
-            });
+            .catch(() => tryProxy(idx + 1));
     };
     return tryProxy(0);
 }
@@ -634,18 +560,13 @@ function isHLS(url) {
 
 function detectVideoType(url) {
     if (url.includes('pixeldrain.com')) return Promise.resolve('iframe');
-
-    // Si la URL ya tiene extensión reconocible, no hace falta fetch
     if (/\.(mp4|webm|ogg)(?:[\/\?&]|$)/i.test(url) || /[\/=](mp4|webm|ogg)(?:[\/\?&]|$)/i.test(url)) return Promise.resolve('mp4');
     if (/\.m3u8(?:[\/\?&]|$)/i.test(url) || /[\/=]m3u8(?:[\/\?&]|$)/i.test(url)) return Promise.resolve('hls');
 
-    // Solo tratar como iframe directamente si tiene palabras clave MUY específicas de embeds
-    // y no parece tener una extensión o segmento de video
     if (/\/(play|embed|player|watch)\//i.test(url) && !/[\/=](mp4|webm|m3u8)(?:[\/\?&]|$)/i.test(url) && !/\.(mp4|webm|m3u8)/i.test(url)) {
         return Promise.resolve('iframe');
     }
 
-    // Intentar HEAD request directo (sin proxy) para ver Content-Type
     const referPolicy = url.includes('pixeldrain.com') ? 'no-referrer' : 'strict-origin-when-cross-origin';
     return fetch(url, { method: 'HEAD', mode: 'no-cors', referrerPolicy: referPolicy })
         .then(() => {
@@ -662,7 +583,7 @@ function detectVideoType(url) {
                     return 'iframe';
                 });
         })
-        .catch(() => 'iframe'); // Si falla cualquier fetch → tratar como iframe
+        .catch(() => 'iframe');
 }
 
 function extractVideoUrl(code) {
@@ -675,13 +596,10 @@ function extractVideoUrl(code) {
     ];
 
     for (let re of patterns) {
-        // Convert to global exactly to search all matches, not just the first abort if pixeldrain
         const globalRe = new RegExp(re.source, re.flags.includes('g') ? re.flags : re.flags + 'g');
         const matches = [...code.matchAll(globalRe)];
         for (const m of matches) {
-            if (m && m[1] && !m[1].includes('pixeldrain.com')) {
-                return m[1];
-            }
+            if (m && m[1] && !m[1].includes('pixeldrain.com')) return m[1];
         }
     }
     return null;
@@ -722,33 +640,23 @@ function unpackPACKED(code) {
 function resolveUrl(server) {
     const url = server.url;
     if (!url) return Promise.resolve('');
-    const isKnownObfuscated =
-        url.includes('jkanime.net') ||
-        url.includes('playmudos.com') ||
-        url.includes('streamani.me');
+    const isKnownObfuscated = url.includes('jkanime.net') || url.includes('playmudos.com') || url.includes('streamani.me');
     if (!server.deobfuscate && !isKnownObfuscated) return Promise.resolve(url);
 
-    console.group('🔍 resolveUrl:', url);
-
-    const timeout = new Promise(resolve => setTimeout(() => {
-        console.warn('⏱️ Timeout — mostrando iframe directamente');
-        console.groupEnd();
-        resolve(url);
-    }, 10000));
+    const timeout = new Promise(resolve => setTimeout(() => resolve(url), 10000));
 
     const extract = proxyFetch(url)
         .then(data => {
             let code = data.contents || '';
-            console.log('📄 HTML recibido:', code.length, 'chars');
-            if (!code) { console.warn('⚠️ HTML vacío'); console.groupEnd(); return url; }
+            if (!code) return url;
 
             let found = extractVideoUrl(code);
-            if (found) { console.log('✅ Capa 1 (HTML crudo):', found); console.groupEnd(); return found; }
+            if (found) return found;
 
             const scripts = [...code.matchAll(/<script[^>]*>([\s\S]*?)<\/script>/gi)];
             for (let si = 0; si < scripts.length; si++) {
                 found = extractVideoUrl(scripts[si][1]);
-                if (found) { console.log(`✅ Capa 2 (script #${si + 1}):`, found); console.groupEnd(); return found; }
+                if (found) return found;
             }
 
             let current = code;
@@ -757,7 +665,7 @@ function resolveUrl(server) {
                 if (!decoded || decoded === current) break;
                 current = decoded;
                 found = extractVideoUrl(current);
-                if (found) { console.log(`✅ Capa 3 (desofuscado ${i + 1}):`, found); console.groupEnd(); return found; }
+                if (found) return found;
             }
 
             for (let si = 0; si < scripts.length; si++) {
@@ -767,19 +675,12 @@ function resolveUrl(server) {
                     if (!decoded || decoded === sc) break;
                     sc = decoded;
                     found = extractVideoUrl(sc);
-                    if (found) { console.log(`✅ Capa 4 (script #${si + 1} capa ${i + 1}):`, found); console.groupEnd(); return found; }
+                    if (found) return found;
                 }
             }
-
-            console.warn('⚠️ No se encontró URL — usando iframe');
-            console.groupEnd();
             return url;
         })
-        .catch(e => {
-            console.error('❌ Error fetch:', e.message, '— usando iframe');
-            console.groupEnd();
-            return url;
-        });
+        .catch(() => url);
 
     return Promise.race([extract, timeout]);
 }
@@ -808,7 +709,6 @@ function loadIframe(wrap, url, server, loader, requestId) {
     const iframeWrap = document.createElement('div');
     iframeWrap.style.cssText = 'position:relative;width:100%;height:100%';
 
-    // Botón pantalla completa solo para iframes de jkanime (solo en móvil)
     if (/jkanime\.net/i.test(url) && GLOBAL_IS_MOBILE) {
         const iconExpand = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>`;
         const iconCollapse = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="10" y1="14" x2="3" y2="21"/><line x1="21" y1="3" x2="14" y2="10"/></svg>`;
@@ -836,7 +736,6 @@ function loadIframe(wrap, url, server, loader, requestId) {
         iframeWrap.appendChild(fsBtn);
     }
 
-    // Bloqueador de popups
     const adBlocker = document.createElement('div');
     adBlocker.style.cssText = 'position:absolute;inset:0;z-index:2;pointer-events:none';
     const origOpen = window.open;
@@ -859,23 +758,16 @@ function loadIframe(wrap, url, server, loader, requestId) {
 
 function updateInterfaceForEpisode(seasonIdx, ep) {
     try {
-        // Actualiza toda la UI sin tocar el reproductor de video
         activeSeason = seasonIdx;
-
-        // Título del episodio en el header del player
         const playerTitle = document.getElementById('player-ep-title');
-        if (playerTitle) {
-            playerTitle.textContent = `Ep. ${ep.num} · ${ep.title || ''}`;
-        }
+        if (playerTitle) playerTitle.textContent = `Ep. ${ep.num} · ${ep.title || ''}`;
 
-        // Marcar como visto
         setWatched(seasonIdx, ep.num, true);
         const input = document.querySelector(`.ep-switch[data-s="${seasonIdx}"][data-e="${ep.num}"] input`);
         if (input) input.checked = true;
         const lbl = document.getElementById(`lbl-${seasonIdx}-${ep.num}`);
         if (lbl) { lbl.textContent = 'Visto'; lbl.classList.add('on'); }
 
-        // Idioma y servidor (safe checks)
         if (ep.langs && ep.langs.length > 0) {
             let prefLang = localStorage.getItem('blaze_preferred_lang');
             const newLangIdx = prefLang ? ep.langs.findIndex(l => l.name === prefLang) : 0;
@@ -888,11 +780,10 @@ function updateInterfaceForEpisode(seasonIdx, ep) {
             if (srvLabel  && ep.langs[activeLang]?.servers?.[0]) srvLabel.textContent = ep.langs[activeLang].servers[0].name || '';
         }
 
-        // Botones prev/next
-        const eps      = SERIE.seasons[seasonIdx].episodes;
-        const idx      = eps.findIndex(e => String(e.num) === String(ep.num));
-        const prevBtn  = document.getElementById('btn-prev');
-        const nextBtn  = document.getElementById('btn-next');
+        const eps = SERIE.seasons[seasonIdx].episodes;
+        const idx = eps.findIndex(e => String(e.num) === String(ep.num));
+        const prevBtn = document.getElementById('btn-prev');
+        const nextBtn = document.getElementById('btn-next');
 
         let prevEp = null, prevSeasonIdx = seasonIdx;
         if (idx > 0) { prevEp = eps[idx - 1]; }
@@ -918,9 +809,7 @@ function updateInterfaceForEpisode(seasonIdx, ep) {
             nextBtn.style.display = nextEp2 ? '' : 'none';
             nextBtn.onclick = () => { if (nextEp2) playEpisode(nextSeasonIdx2, nextEp2.num, true); }; 
         }
-    } catch (err) {
-        console.error("Error updating interface for episode:", err);
-    }
+    } catch (err) { }
 }
 
 function handleAutoplayNext() {
@@ -956,8 +845,8 @@ function handleAutoplayNext() {
 
     if (nextEp) {
         const nextBtn = document.getElementById('btn-next');
-        
         let fsOverlay = null;
+
         if (isFullscreenStart && playerWrap) {
             window._pendingFullscreen = true;
             document.querySelectorAll('.autoplay-fs-overlay').forEach(el => el.remove());
@@ -965,7 +854,7 @@ function handleAutoplayNext() {
             fsOverlay.className = 'autoplay-fs-overlay';
             const epImg = nextEp.thumb || nextEp.img || SERIE.poster || SERIE.image || '';
             const epImgHtml = epImg ? `<div class="fs-ep-img" style="border-radius:12px; overflow:hidden; margin-bottom:10px; box-shadow:0 10px 30px rgba(0,0,0,0.6); background:#111; position:relative; z-index:2;"><img src="${epImg}" style="width:100%; height:100%; object-fit:cover;"></div>` : '';
-            fsOverlay.style.background = 'transparent'; // Evitar fondo negro que tape todo
+            fsOverlay.style.background = 'transparent';
             const bgHtml = epImg ? `<div style="position:absolute; inset:-10%; background-image:url('${epImg}'); background-size:cover; background-position:center; filter:blur(12px); opacity:0.6; z-index:1; pointer-events:none;"></div><div style="position:absolute; inset:0; background:radial-gradient(circle, rgba(0,0,0,0.2) 0%, rgba(0,0,0,0.8) 100%); z-index:1; pointer-events:none;"></div><div style="position:absolute; inset:0; background:#000; z-index:0; opacity:0.85; pointer-events:none;"></div>` : '<div style="position:absolute; inset:0; background:#000; z-index:0; pointer-events:none;"></div>';
             
             const nextSeasonObj = SERIE.seasons[nextSeasonIdx];
@@ -982,10 +871,7 @@ function handleAutoplayNext() {
                     <button id="fs-cancel-btn">Cancelar</button>
                 </div>
             `;
-            const activeFsElement = document.fullscreenElement || document.webkitFullscreenElement || playerWrap;
             activeFsElement.appendChild(fsOverlay);
-
-            // Actualizar la interfaz de la serie inmediatamente (sin recargar el reproductor)
             currentEpisode = nextEp;
             updateInterfaceForEpisode(nextSeasonIdx, nextEp);
         } else {
@@ -996,7 +882,6 @@ function handleAutoplayNext() {
         let span = null;
         let originalText = 'Siguiente';
 
-        // Solo animar el botón si sigue visible (puede haber sido ocultado si es el último cap)
         const nextBtnVisible = nextBtn && nextBtn.style.display !== 'none' && !nextBtn.disabled;
         if (nextBtnVisible) {
             nextBtn.classList.add('autoplay-loading');
@@ -1022,32 +907,28 @@ function handleAutoplayNext() {
                     nextBtn.classList.remove('autoplay-loading');
                     if (span) span.textContent = originalText;
                 }
+                
+                // Carga el nuevo episodio limpiamente garantizando el estado (_pendingFullscreen se encarga de reanudar fs)
                 const isFsNow = !!(document.fullscreenElement || document.webkitFullscreenElement);
-                if (isFullscreenStart) {
-                    // Si iniciamos en fullscreen (o todavía lo estamos), intercambiar sin destruir el DOM
-                    swapVideoInFullscreen(nextEp, nextSeasonIdx);
-                } else {
-                    playEpisode(nextSeasonIdx, nextEp.num, true, true);
-                }
+                if (isFsNow) window._pendingFullscreen = true;
+                playEpisode(nextSeasonIdx, nextEp.num, true, true);
             }
         }, 1000);
             
-            if (fsOverlay) {
-                document.getElementById('fs-cancel-btn').onclick = (e) => {
-                    e.stopPropagation();
-                    clearInterval(window._autoplayTimer);
-                    window._autoplayTimer = null;
-                    fsOverlay.remove();
-                    if (nextBtn) nextBtn.classList.remove('autoplay-loading');
-                    if (span) span.textContent = originalText;
-                    window._pendingFullscreen = false;
-                    // Revertir la interfaz al episodio anterior
-                    currentEpisode = eps[currentIdx];
-                    updateInterfaceForEpisode(activeSeason, eps[currentIdx]);
-                };
-            }
+        if (fsOverlay) {
+            document.getElementById('fs-cancel-btn').onclick = (e) => {
+                e.stopPropagation();
+                clearInterval(window._autoplayTimer);
+                window._autoplayTimer = null;
+                fsOverlay.remove();
+                if (nextBtn) nextBtn.classList.remove('autoplay-loading');
+                if (span) span.textContent = originalText;
+                window._pendingFullscreen = false;
+                currentEpisode = eps[currentIdx];
+                updateInterfaceForEpisode(activeSeason, eps[currentIdx]);
+            };
+        }
     } else {
-        // Pantalla de finalización (película o fin de serie)
         document.querySelectorAll('.autoplay-fs-overlay').forEach(el => el.remove());
         const fsOverlay = document.createElement('div');
         fsOverlay.className = 'autoplay-fs-overlay';
@@ -1061,11 +942,6 @@ function handleAutoplayNext() {
             <div style="position:relative; z-index:2; text-align:center; display:flex; flex-direction:column; align-items:center; justify-content:center; width:100%; height:100%; padding:20px; box-sizing:border-box;">
                 <div class="fs-ep-img" style="border-radius:12px; overflow:hidden; margin-bottom:20px; box-shadow:0 10px 30px rgba(0,0,0,0.6); background:#111; position:relative; z-index:2;">
                     <img src="${img}" style="width:100%; height:100%; object-fit:cover;">
-                    <div style="position:absolute; inset:0; background:rgba(0,0,0,0.5); display:flex; align-items:center; justify-content:center;">
-                        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                            <polyline points="20 6 9 17 4 12"></polyline>
-                        </svg>
-                    </div>
                 </div>
                 <div style="font-size:14px; color:var(--accent); font-weight:800; letter-spacing:1.5px; text-transform:uppercase; margin-bottom:8px;">${label}</div>
                 <div style="font-size:28px; font-weight:900; color:#fff; line-height:1.2; margin-bottom:12px; max-width:600px;">${SERIE.title || ''}</div>
@@ -1077,8 +953,6 @@ function handleAutoplayNext() {
         
         const closeBtn = fsOverlay.querySelector('#fs-close-final-btn');
         if (closeBtn) {
-            closeBtn.onmouseenter = () => closeBtn.style.transform = 'scale(1.05)';
-            closeBtn.onmouseleave = () => closeBtn.style.transform = 'scale(1)';
             closeBtn.onclick = (e) => {
                 e.stopPropagation();
                 fsOverlay.remove();
@@ -1091,132 +965,6 @@ function handleAutoplayNext() {
         }
     }
 }
-
-
-
-// ── Intercambio de video en fullscreen (sin reconstruir DOM) ─────
-function swapVideoInFullscreen(nextEp, nextSeasonIdx) {
-    document.querySelectorAll('.autoplay-fs-overlay').forEach(el => el.remove());
-    // Buscar el <video> existente antes de cualquier cambio
-    const playerWrap = document.getElementById('player-wrap');
-    const existingVideo = playerWrap ? playerWrap.querySelector('video') : null;
-
-    if (!existingVideo) {
-        // No hay video nativo activo (ej: iframe) — flujo normal
-        renderPlayer(true);
-        return;
-    }
-
-    const lang = nextEp.langs[activeLang] || nextEp.langs[0];
-    if (!lang || !lang.servers || !lang.servers.length) {
-        renderPlayer(true);
-        return;
-    }
-    const server = lang.servers[activeServer] || lang.servers[0];
-
-    // Actualizar poster del video inmediatamente
-    const newPoster = nextEp.thumb || nextEp.img || SERIE.poster || SERIE.image || '';
-    if (newPoster) existingVideo.setAttribute('poster', newPoster);
-
-    // Mostrar loading encima del video mientras carga (sin destruir nada)
-    const fsContainer = document.fullscreenElement || document.webkitFullscreenElement || playerWrap;
-    let swapLoader = document.getElementById('swap-loader-overlay');
-    if (!swapLoader) {
-        swapLoader = document.createElement('div');
-        swapLoader.id = 'swap-loader-overlay';
-        swapLoader.style.cssText = `
-            position:absolute; inset:0; z-index:9999;
-            display:flex; align-items:center; justify-content:center;
-            overflow:hidden;
-            background:transparent;
-        `;
-        
-        const bgHtml = newPoster ? `<div style="position:absolute;inset:0;background:url('${newPoster}') center/cover;filter:blur(20px);opacity:0.5;transform:scale(1.1);z-index:0;"></div>` : '';
-        
-        swapLoader.innerHTML = `
-            ${bgHtml}
-            <div style="position:absolute;inset:0;background:rgba(0,0,0,0.6);z-index:1;"></div>
-            <div style="text-align:center;position:relative;z-index:2;display:flex;flex-direction:column;align-items:center;">
-                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--accent,#FFAA00)" stroke-width="2"
-                     style="animation:spin 0.8s linear infinite; display:block; margin:0 auto 12px;">
-                    <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
-                    <polyline points="3 3 3 8 8 8"/>
-                </svg>
-                <div style="color:#fff; font-size:16px; font-weight:600; text-shadow:0 2px 4px rgba(0,0,0,0.8);">Cargando episodio...</div>
-            </div>`;
-        fsContainer.appendChild(swapLoader);
-    }
-
-    // Usar el mismo resolveUrl que usa renderPlayer
-    resolveUrl(server).then(resolved => {
-        let finalUrl = typeof resolved === 'object' ? resolved.url : resolved;
-        if (!finalUrl) {
-            if (swapLoader) swapLoader.remove();
-            renderPlayer(true);
-            return;
-        }
-
-        window._isAutoplay = true;
-        const isHLSUrl = isHLS(finalUrl);
-
-        const hideSwapLoader = () => {
-            if (swapLoader) { swapLoader.remove(); swapLoader = null; }
-        };
-
-        // Reset state so old listeners treat it as a new episode
-        existingVideo._resumeChecked = false;
-        existingVideo._lastSave = 0;
-        resumeToastShown = false;
-
-        if (isHLSUrl && hlsInstance) {
-            // Reutilizar instancia HLS — solo cambiar fuente, sin tocar el DOM
-            hlsInstance.stopLoad();
-            hlsInstance.detachMedia();
-            hlsInstance.loadSource(finalUrl);
-            hlsInstance.attachMedia(existingVideo);
-            hlsInstance.once(window.Hls.Events.MANIFEST_PARSED, () => {
-                existingVideo.play().catch(() => {});
-            });
-            existingVideo.addEventListener('canplay', hideSwapLoader, { once: true });
-        } else if (isHLSUrl && window.Hls && window.Hls.isSupported()) {
-            if (hlsInstance) { hlsInstance.destroy(); hlsInstance = null; }
-            const hls = new window.Hls({ maxBufferLength: 60, maxMaxBufferLength: 120 });
-            hls.loadSource(finalUrl);
-            hls.attachMedia(existingVideo);
-            hls.once(window.Hls.Events.MANIFEST_PARSED, () => {
-                existingVideo.play().catch(() => {});
-            });
-            hlsInstance = hls;
-            existingVideo.addEventListener('canplay', hideSwapLoader, { once: true });
-        } else {
-            // MP4/WebM — cambiar src sin tocar el DOM ni el fullscreen
-            existingVideo.pause();
-            existingVideo.src = finalUrl;
-            existingVideo.load();
-            existingVideo.addEventListener('canplay', () => {
-                hideSwapLoader();
-                existingVideo.play().catch(() => {});
-            }, { once: true });
-        }
-
-        // Ocultar loader tras timeout de seguridad
-        setTimeout(hideSwapLoader, 8000);
-
-        // Re-conectar el evento ended para el nuevo capítulo
-        if (existingVideo._onEndedAutoplay) {
-            existingVideo.removeEventListener('ended', existingVideo._onEndedAutoplay);
-        }
-        const onEnded = () => {
-            const key = resumeKey();
-            if (key) localStorage.removeItem(key);
-            handleAutoplayNext();
-        };
-        existingVideo._onEndedAutoplay = onEnded;
-        existingVideo.addEventListener('ended', onEnded);
-    });
-}
-
-
 
 function buildVideoPlayer(wrap, url, poster, videoType, mainLoader, server, requestId) {
     if (requestId && requestId !== renderCount) return;
@@ -1271,7 +1019,6 @@ function buildVideoPlayer(wrap, url, poster, videoType, mainLoader, server, requ
         wolfInstance = new window.WolfPlayer('#wolf-player-container', wolfConfig);
         setTimeout(hideLoader, 2000);
 
-        // Forzar precarga apenas el contenedor genere la etiqueta nativa (evitamos fallos API de WolfPlayer)
         let preloadAttempts = 0;
         const preloadIv = setInterval(() => {
             if (requestId && requestId !== renderCount) return clearInterval(preloadIv);
@@ -1279,7 +1026,6 @@ function buildVideoPlayer(wrap, url, poster, videoType, mainLoader, server, requ
             if (v) {
                 clearInterval(preloadIv);
 
-                // Configuración crítica antes del load
                 if (url.includes('pixeldrain.com')) {
                     v.setAttribute('referrerpolicy', 'no-referrer');
                 }
@@ -1297,16 +1043,6 @@ function buildVideoPlayer(wrap, url, poster, videoType, mainLoader, server, requ
                         }
                     }
                 }, { once: true });
-            } else if (++preloadAttempts > 40) {
-                clearInterval(preloadIv);
-            }
-        }, 50);
-
-        setTimeout(() => {
-            if (requestId && requestId !== renderCount) return;
-
-            const v = container.querySelector('video');
-            if (v) {
 
                 let errorCount = 0;
                 let lastErrorTime = 0;
@@ -1317,57 +1053,41 @@ function buildVideoPlayer(wrap, url, poster, videoType, mainLoader, server, requ
                     const errCode = v.error ? v.error.code : 0;
                     const now = Date.now();
                     
-                    // Ignorar errores transitorios (código 1: abortado por usuario)
-                    if (errCode === 1) {
-                        console.warn(`⚠️ Ignorando error transitorio en video (código ${errCode}).`);
-                        return;
-                    }
+                    if (errCode === 1) return; // Ignorar abortos
                     
-                    // Para errores de red (código 2), verificar si es transitorio por seeking
                     if (errCode === 2) {
-                        // Resetear contador si han pasado más de 3 segundos desde el último error
-                        if (now - lastErrorTime > 3000) {
-                            errorCount = 0;
-                        }
-                        
+                        if (now - lastErrorTime > 5000) errorCount = 0;
                         errorCount++;
                         lastErrorTime = now;
                         
-                        // Si es el primer o segundo error de red, es probablemente por seeking
-                        if (errorCount <= 2) {
-                            console.warn(`⚠️ Error de red transitorio durante seeking (intento ${errorCount}/2).`);
+                        // RECUPERACIÓN INTELIGENTE DE RED (Evita que se quede cargando al adelantar)
+                        if (errorCount <= 3) {
+                            console.warn(`⚠️ Error de red transitorio al adelantar (Intento ${errorCount}/3). Reconectando...`);
+                            const ct = v.currentTime;
+                            // Envolver en timeout permite que el DOM respire antes de recargar
+                            setTimeout(() => {
+                                v.load();
+                                try { v.currentTime = ct; } catch(ex){}
+                                safePlay();
+                            }, 300);
                             return;
                         }
-                        
-                        // Si hay más de 2 errores seguidos, es un problema real
-                        console.error('❌ Error de red persistente al cargar el video:', e, v.error);
-                    } else {
-                        // Para otros errores (código 3: decodificación, código 4: formato)
-                        const errorMessages = {
-                            3: 'Error al decodificar el video',
-                            4: 'Formato de video no soportado'
-                        };
-                        const errorMsg = errorMessages[errCode] || 'Error al cargar el video';
-                        console.error(`❌ ${errorMsg} (código ${errCode}):`, e, v.error);
                     }
 
-                    // Solo hacer fallback si hay múltiples errores o es error fatal
-                    if (server && server.url && (errCode !== 2 || errorCount > 2)) {
+                    if (server && server.url && (errCode !== 2 || errorCount > 3)) {
                         const fallbackUrl = (url !== server.url) ? server.url : url;
-                        console.warn('⚠️ Fallback a iframe:', fallbackUrl);
+                        console.warn('⚠️ Fallback final a iframe:', fallbackUrl);
                         wrap.innerHTML = '';
                         const newLoader = createLoadingOverlay(wrap);
                         loadIframe(wrap, fallbackUrl, server, newLoader, requestId);
                         return;
                     }
 
-                    // Solo mostrar error fatal si es persistente
-                    if (errCode !== 2 || errorCount > 2) {
+                    if (errCode !== 2 || errorCount > 3) {
                         hideLoader();
                         const errorMsg = errCode === 2 ? 'Error de red al cargar el video' : 
                                        errCode === 3 ? 'Error al decodificar el video' : 
-                                       errCode === 4 ? 'Formato de video no soportado' : 
-                                       'Error al cargar el video';
+                                       errCode === 4 ? 'Formato de video no soportado' : 'Error al cargar el video';
                         wrap.innerHTML = `<div class="player-placeholder">
                           <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
                             <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
@@ -1378,29 +1098,17 @@ function buildVideoPlayer(wrap, url, poster, videoType, mainLoader, server, requ
                     }
                 });
                 
-                // Resetear contador de errores cuando el video se reproduce correctamente
-                v.addEventListener('playing', () => {
-                    errorCount = 0;
-                    lastErrorTime = 0;
-                });
+                v.addEventListener('playing', () => { errorCount = 0; lastErrorTime = 0; });
 
                 let saveInterval = null;
                 v._resumeChecked = false;
-                let playPromise = null;
 
-                // Función segura para reproducir el video sin conflictos
+                // SOLUCIÓN AL DEADLOCK DE PROMESAS (Evita que el video rechace órdenes al hacer Continuar)
                 const safePlay = () => {
-                    if (playPromise) {
-                        playPromise.then(() => {
-                            playPromise = v.play().catch(err => {
-                                console.warn('Error al reproducir:', err.message);
-                            });
-                        });
-                    } else {
-                        playPromise = v.play().catch(err => {
-                            console.warn('Error al reproducir:', err.message);
-                        });
-                    }
+                    setTimeout(() => {
+                        const p = v.play();
+                        if (p !== undefined) p.catch(err => console.warn('safePlay error:', err.message));
+                    }, 50);
                 };
 
                 const checkResume = () => {
@@ -1424,26 +1132,22 @@ function buildVideoPlayer(wrap, url, poster, videoType, mainLoader, server, requ
                         if (hasSignificantProgress && isNearStart) {
                             showResumeToast(saved, () => {
                                 const jump = () => { 
-                                    v.currentTime = saved; 
+                                    try { v.currentTime = saved; } catch(ex){}
                                     safePlay(); 
                                 };
-                                if (v.readyState >= 1) jump();
-                                else {
-                                    const h = () => { 
-                                        v.currentTime = saved; 
-                                        v.removeEventListener('loadedmetadata', h); 
-                                    };
-                                    v.addEventListener('loadedmetadata', h);
-                                    safePlay();
+                                // SOLUCIÓN AL CUELGUE AL CONTINUAR ANTES DE CARGAR
+                                if (v.readyState >= 1) {
+                                    jump();
+                                } else {
+                                    v.addEventListener('loadedmetadata', jump, { once: true });
+                                    if (v.preload === 'none') v.load();
                                 }
                             }, () => { safePlay(); });
                         }
                     };
-
                     tryShow();
                 };
 
-                // Llamar inmediatamente para mostrar el toast antes de que cargue el video
                 checkResume();
 
                 const doSave = () => {
@@ -1472,6 +1176,7 @@ function buildVideoPlayer(wrap, url, poster, videoType, mainLoader, server, requ
                 v.addEventListener('ended', () => {
                     if (requestId && requestId !== renderCount) return;
                     clearInterval(saveInterval);
+                    saveInterval = null;
                     const key = resumeKey();
                     if (key) localStorage.removeItem(key);
                     handleAutoplayNext();
@@ -1493,7 +1198,10 @@ function buildVideoPlayer(wrap, url, poster, videoType, mainLoader, server, requ
                     e.preventDefault();
                     e.stopPropagation();
                     const ie = currentEpisode ? currentEpisode.introEnd : 0;
-                    if (ie > 0) v.currentTime = ie;
+                    if (ie > 0) {
+                        try { v.currentTime = ie; } catch(ex){}
+                        safePlay();
+                    }
                     skipBtn.style.opacity = '0';
                     skipBtn.style.pointerEvents = 'none';
                 });
@@ -1513,12 +1221,16 @@ function buildVideoPlayer(wrap, url, poster, videoType, mainLoader, server, requ
                 v.addEventListener('play', checkIntro);
                 v.addEventListener('timeupdate', checkIntro);
                 v.addEventListener('seeked', checkIntro);
+
+            } else if (++preloadAttempts > 40) {
+                clearInterval(preloadIv);
             }
-        }, 1000);
+        }, 50);
+
     } else {
         const video = document.createElement('video');
         video.controls = true;
-        video.preload = isMobile ? 'metadata' : 'auto';
+        video.preload = GLOBAL_IS_MOBILE ? 'metadata' : 'auto';
         video.poster = poster;
         video.autoplay = window._isAutoplay || false;
         video.playsInline = true;
@@ -1529,9 +1241,9 @@ function buildVideoPlayer(wrap, url, poster, videoType, mainLoader, server, requ
                 video.src = url;
             } else if (typeof window.Hls !== 'undefined' && window.Hls.isSupported()) {
                 const hls = new window.Hls({
-                    maxBufferLength: isMobile ? 15 : 45,
-                    maxMaxBufferLength: isMobile ? 30 : 90,
-                    startLevel: isMobile ? 0 : -1
+                    maxBufferLength: GLOBAL_IS_MOBILE ? 15 : 45,
+                    maxMaxBufferLength: GLOBAL_IS_MOBILE ? 30 : 90,
+                    startLevel: GLOBAL_IS_MOBILE ? 0 : -1
                 });
                 hls.loadSource(url);
                 hls.attachMedia(video);
@@ -1544,9 +1256,50 @@ function buildVideoPlayer(wrap, url, poster, videoType, mainLoader, server, requ
         }
 
         container.appendChild(video);
+        
+        const safePlayFallback = () => {
+            setTimeout(() => {
+                const p = video.play();
+                if (p !== undefined) p.catch(err => console.warn('safePlayFallback error:', err.message));
+            }, 50);
+        };
+
+        let errCountFallback = 0;
+        let lastErrFallback = 0;
+        video.addEventListener('error', () => {
+            const code = video.error ? video.error.code : 0;
+            if (code === 1) return;
+            const now = Date.now();
+            if (code === 2) {
+                if (now - lastErrFallback > 5000) errCountFallback = 0;
+                errCountFallback++;
+                lastErrFallback = now;
+                
+                if (errCountFallback <= 3) {
+                    const ct = video.currentTime;
+                    setTimeout(() => {
+                        if (hlsInstance) {
+                            hlsInstance.recoverMediaError();
+                        } else {
+                            video.load();
+                            try { video.currentTime = ct; } catch(ex){}
+                        }
+                        safePlayFallback();
+                    }, 500);
+                    return;
+                }
+            }
+            if (server && server.url) {
+                const fallbackUrl = (url !== server.url) ? server.url : url;
+                wrap.innerHTML = '';
+                const newLoader = createLoadingOverlay(wrap);
+                loadIframe(wrap, fallbackUrl, server, newLoader, requestId);
+            }
+        });
+
         video.addEventListener('canplay', () => {
             hideLoader();
-            video.play().catch(() => { });
+            safePlayFallback();
             if (window._pendingFullscreen) {
                 window._pendingFullscreen = false;
                 if (video.requestFullscreen) video.requestFullscreen().catch(()=>{});
@@ -1555,26 +1308,6 @@ function buildVideoPlayer(wrap, url, poster, videoType, mainLoader, server, requ
         
         let saveInterval = null;
         video._resumeChecked = false;
-        let playPromiseFallback = null;
-
-        // Función segura para reproducir el video sin conflictos
-        const safePlayFallback = () => {
-            if (playPromiseFallback) {
-                playPromiseFallback.then(() => {
-                    playPromiseFallback = video.play().catch(err => {
-                        console.warn('Error al reproducir (fallback):', err.message);
-                    });
-                }).catch(() => {
-                    playPromiseFallback = video.play().catch(err => {
-                        console.warn('Error al reproducir (fallback):', err.message);
-                    });
-                });
-            } else {
-                playPromiseFallback = video.play().catch(err => {
-                    console.warn('Error al reproducir (fallback):', err.message);
-                });
-            }
-        };
         
         const checkResumeFallback = () => {
             if (requestId && requestId !== renderCount) return;
@@ -1588,10 +1321,16 @@ function buildVideoPlayer(wrap, url, poster, videoType, mainLoader, server, requ
             const currentTime = video.currentTime || 0;
             if (saved > 30 && (currentTime < 60 || Math.abs(currentTime - saved) > 60)) {
                 showResumeToast(saved, () => {
-                    const jump = () => { video.currentTime = saved; video.play(); };
+                    const jump = () => { 
+                        try { video.currentTime = saved; } catch(ex){}
+                        safePlayFallback(); 
+                    };
                     if (video.readyState >= 1) jump();
-                    else video.addEventListener('loadedmetadata', jump, { once: true });
-                }, () => { video.play(); });
+                    else {
+                        video.addEventListener('loadedmetadata', jump, { once: true });
+                        video.load();
+                    }
+                }, () => { safePlayFallback(); });
             }
         };
         video.addEventListener('loadedmetadata', checkResumeFallback);
@@ -1619,6 +1358,7 @@ function buildVideoPlayer(wrap, url, poster, videoType, mainLoader, server, requ
         video.addEventListener('ended', () => {
             if (requestId && requestId !== renderCount) return;
             clearInterval(saveInterval);
+            saveInterval = null;
             const key = resumeKey();
             if (key) localStorage.removeItem(key);
             handleAutoplayNext();
@@ -1639,11 +1379,8 @@ function renderPlayer(animate = false) {
 
     wrap.innerHTML = '';
     wrap.classList.remove('loaded', 'switching');
-
-    // No añadimos 'switching' aún para que el loader sea visible
     const loader = createLoadingOverlay(wrap);
 
-    // Validar que existan los datos necesarios
     if (!currentEpisode || !currentEpisode.langs || !currentEpisode.langs[activeLang]) {
         loader.hide();
         wrap.innerHTML = `<div class="player-placeholder">
@@ -1699,16 +1436,11 @@ function renderPlayer(animate = false) {
             loadIframe(wrap, server.url, server, loader, myCount);
         }
 
-        // Antes de inyectar el contenido real, preparamos la animación
         if (animate) wrap.classList.add('switching');
-
         requestAnimationFrame(() => requestAnimationFrame(() => wrap.classList.add('loaded')));
     });
 }
 
-
-
-// ── Eventos del reproductor ───────────────────────────────
 const closePlayerBtn = $('btn-close-player');
 if (closePlayerBtn) {
     closePlayerBtn.addEventListener('click', (e) => {
@@ -1732,60 +1464,40 @@ if (srvBtn) {
     });
 }
 
-// Quitar foco de todos los botones después de hacer click
 document.addEventListener('click', (e) => {
     if (e.target.closest('.action-btn, .nav-btn')) {
         setTimeout(() => {
-            if (document.activeElement) {
-                document.activeElement.blur();
-            }
+            if (document.activeElement) document.activeElement.blur();
         }, 100);
     }
 }, true);
 
-// Botón de transmitir (cast)
 const castBtn = $('btn-cast');
 if (castBtn) {
     castBtn.addEventListener('click', (e) => {
         const btn = e.currentTarget;
-
-        if (!currentEpisode || !currentEpisode.langs || !currentEpisode.langs[activeLang]) {
-            return;
-        }
-
+        if (!currentEpisode || !currentEpisode.langs || !currentEpisode.langs[activeLang]) return;
         const server = currentEpisode.langs[activeLang].servers[activeServer];
-        if (!server || !server.url) {
-            return;
-        }
+        if (!server || !server.url) return;
 
         const url = server.url;
         const castUrl = `intent://${url.replace(/^https?:\/\//, '')}#Intent;scheme=${url.startsWith('https') ? 'https' : 'http'};package=com.instantbits.cast.webvideo;end`;
 
-        // Quitar el foco inmediatamente
         setTimeout(() => btn.blur(), 0);
-
-        if (typeof window.openCastModal === 'function') {
-            window.openCastModal(castUrl);
-        } else {
-            window.location.href = castUrl;
-        }
+        if (typeof window.openCastModal === 'function') window.openCastModal(castUrl);
+        else window.location.href = castUrl;
     });
 }
 
-// ── Inicialización ────────────────────────────────────────
 if (SERIE.type === 'movie') {
-    // Es una película: no renderizar menús y abrir directamente
     const firstS = SERIE.seasons[0];
     if (firstS && firstS.episodes.length > 0) {
-        // Un pequeño delay para asegurar que el DOM esté listo
         setTimeout(() => playEpisode(0, firstS.episodes[0].num), 100);
     }
 } else {
-    // Es una serie: comportamiento normal
     renderTabs();
     renderEpisodes(true);
 
-    // ── Inicialización Auto-Watched (siempre activo para series) ──────────
     (function () {
         const map = getWatchedMap();
         let highestS = -1;
@@ -1802,15 +1514,12 @@ if (SERIE.type === 'movie') {
             }
             if (highestS !== -1) break;
         }
-
         if (highestS !== -1 && highestE !== -1) {
             setTimeout(() => playEpisode(highestS, highestE), 150);
         }
     })();
 }
 
-
-// ── Modal de Reportes ─────────────────────────────────────
 (function () {
     const overlay = document.getElementById('report-modal-overlay');
     const box = document.getElementById('report-modal-box');
@@ -1830,9 +1539,7 @@ if (SERIE.type === 'movie') {
 
         langSelect.innerHTML = '';
         (currentEpisode.langs || []).forEach((l, i) => {
-            const o = document.createElement('option');
-            o.value = i;
-            o.textContent = l.name;
+            const o = document.createElement('option'); o.value = i; o.textContent = l.name;
             if (i === activeLang) o.selected = true;
             langSelect.appendChild(o);
         });
@@ -1840,9 +1547,7 @@ if (SERIE.type === 'movie') {
         function fillServers(li) {
             srvSelect.innerHTML = '';
             (currentEpisode.langs?.[li]?.servers || []).forEach((s, i) => {
-                const o = document.createElement('option');
-                o.value = i;
-                o.textContent = s.name;
+                const o = document.createElement('option'); o.value = i; o.textContent = s.name;
                 if (li === activeLang && i === activeServer) o.selected = true;
                 srvSelect.appendChild(o);
             });
@@ -1851,109 +1556,71 @@ if (SERIE.type === 'movie') {
         fillServers(activeLang);
         if (langSelect) langSelect.addEventListener('change', () => fillServers(+langSelect.value));
 
-        typeSelect.value = '';
-        comment.value = '';
-        status.textContent = '';
-        formView.style.display = '';
-        successView.style.display = 'none';
-        successIcon.style.transform = 'scale(0.5)';
-        successIcon.style.opacity = '0';
+        typeSelect.value = ''; comment.value = ''; status.textContent = '';
+        formView.style.display = ''; successView.style.display = 'none';
+        successIcon.style.transform = 'scale(0.5)'; successIcon.style.opacity = '0';
         overlay.style.display = 'flex';
-        requestAnimationFrame(() => requestAnimationFrame(() => {
-            box.style.transform = 'scale(1)';
-            box.style.opacity = '1';
-        }));
+        requestAnimationFrame(() => requestAnimationFrame(() => { box.style.transform = 'scale(1)'; box.style.opacity = '1'; }));
     }
 
     function closeModal() {
-        box.style.transform = 'scale(0.94)';
-        box.style.opacity = '0';
-        setTimeout(() => {
-            overlay.style.display = 'none';
-        }, 220);
+        box.style.transform = 'scale(0.94)'; box.style.opacity = '0';
+        setTimeout(() => { overlay.style.display = 'none'; }, 220);
     }
 
     const reportBtn = $('btn-report');
     if (reportBtn) reportBtn.addEventListener('click', openModal);
     if (closeBtn) closeBtn.addEventListener('click', closeModal);
-    if (overlay) {
-        overlay.addEventListener('click', e => {
-            if (e.target === overlay) closeModal();
-        });
-    }
+    if (overlay) overlay.addEventListener('click', e => { if (e.target === overlay) closeModal(); });
 
     sendBtn.addEventListener('click', async () => {
         const cfg = window.REPORT_CONFIG || {};
         if (!cfg.botToken || cfg.botToken === 'TU_BOT_TOKEN_AQUI') {
-            status.style.color = '#ff5050';
-            status.textContent = 'Bot de Telegram no configurado.';
-            return;
+            status.style.color = '#ff5050'; status.textContent = 'Bot de Telegram no configurado.'; return;
         }
-
         if (!typeSelect.value) {
-            status.style.color = '#ff5050';
-            status.textContent = 'Selecciona un tipo de problema.';
-            return;
+            status.style.color = '#ff5050'; status.textContent = 'Selecciona un tipo de problema.'; return;
         }
 
-        const li = +langSelect.value;
-        const si = +srvSelect.value;
+        const li = +langSelect.value, si = +srvSelect.value;
         const lang = currentEpisode.langs?.[li]?.name || '-';
         const server = currentEpisode.langs?.[li]?.servers?.[si]?.name || '-';
 
         const lines = [
             '🚨 *Nuevo reporte*',
-            `🆔 *ID Serie:* \`${SERIE.id || '-'}\``,
-            `📺 *Serie:* \`${SERIE.title || '-'}\``,
-            `🎭 *Tipo:* \`Episodio\``,
-            `📅 *Temporada:* \`${activeSeason + 1}\``,
-            `🎞 *Episodio:* \`${currentEpisode.num} - ${currentEpisode.title || '-'}\``,
-            `🌐 *Idioma:* \`${lang}\``,
-            `🖥 *Servidor:* \`${server}\``,
+            `🆔 *ID Serie:* \`${SERIE.id || '-'}\``, `📺 *Serie:* \`${SERIE.title || '-'}\``,
+            `📅 *Temporada:* \`${activeSeason + 1}\``, `🎞 *Episodio:* \`${currentEpisode.num} - ${currentEpisode.title || '-'}\``,
+            `🌐 *Idioma:* \`${lang}\``, `🖥 *Servidor:* \`${server}\``,
             `⚠️ *Problema:* \`${typeSelect.value}\``,
             comment.value.trim() ? `💬 *Comentario:* \`${comment.value.trim()}\`` : null
         ].filter(Boolean).join('\n');
 
-        sendBtn.disabled = true;
-        status.style.color = '#888899';
-        status.textContent = 'Enviando...';
+        sendBtn.disabled = true; status.style.color = '#888899'; status.textContent = 'Enviando...';
 
         try {
-            const body = {
-                chat_id: cfg.chatId,
-                text: lines,
-                parse_mode: 'Markdown'
-            };
+            const body = { chat_id: cfg.chatId, text: lines, parse_mode: 'Markdown' };
             if (cfg.topicId) body.message_thread_id = cfg.topicId;
 
             const res = await fetch(`https://api.telegram.org/bot${cfg.botToken}/sendMessage`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(body)
+                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
             });
 
             const data = await res.json();
             if (data.ok) {
-                formView.style.display = 'none';
-                successView.style.display = '';
+                formView.style.display = 'none'; successView.style.display = '';
                 requestAnimationFrame(() => requestAnimationFrame(() => {
-                    successIcon.style.transform = 'scale(1)';
-                    successIcon.style.opacity = '1';
+                    successIcon.style.transform = 'scale(1)'; successIcon.style.opacity = '1';
                 }));
                 setTimeout(closeModal, 2000);
-            } else {
-                throw new Error(data.description);
-            }
+            } else throw new Error(data.description);
         } catch {
-            status.style.color = '#ff5050';
-            status.textContent = 'Error al enviar. Intenta de nuevo.';
+            status.style.color = '#ff5050'; status.textContent = 'Error al enviar. Intenta de nuevo.';
         } finally {
             if (sendBtn) sendBtn.disabled = false;
         }
     });
 })();
 
-// ── Reset de progreso de Serie (Modal Confirmación) ────────
 (function() {
     const btnReset = document.getElementById('btn-serie-reset');
     const overlay  = document.getElementById('serie-options-overlay');
@@ -1981,84 +1648,41 @@ if (SERIE.type === 'movie') {
 
     if (btnConfirm) {
         btnConfirm.addEventListener('click', async () => {
-            // Mostrar spinner en el botón
             btnConfirm.disabled = true;
-            btnConfirm.innerHTML = `
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
-                     style="animation: spin 0.7s linear infinite;">
-                    <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
-                    <polyline points="3 3 3 8 8 8"/>
-                </svg>
-                Reseteando...`;
+            btnConfirm.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="animation: spin 0.7s linear infinite;"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><polyline points="3 3 3 8 8 8"/></svg> Reseteando...`;
 
-            // Pequeña pausa visual para que se vea el spinner
             await new Promise(r => setTimeout(r, 300));
-
-            // 1. Limpiar localStorage de vistos y progreso
             localStorage.removeItem(WATCHED_KEY);
-            const resumePrefix = 'resume_' + SERIE.id + '_';
-            const cwExact = 'cw_' + SERIE.id;
-            const cwMetaExact = 'cw_meta_' + SERIE.id;
+            const resumePrefix = 'resume_' + SERIE.id + '_', cwExact = 'cw_' + SERIE.id, cwMetaExact = 'cw_meta_' + SERIE.id;
             for (let i = localStorage.length - 1; i >= 0; i--) {
                 const key = localStorage.key(i);
-                if (key) {
-                    // Usar strict match (===) para cw_ y cw_meta_ para no borrar series con IDs que empiecen igual (ej: 12 y 123)
-                    if (key.startsWith(resumePrefix) || key === cwExact || key === cwMetaExact) {
-                        localStorage.removeItem(key);
-                    }
-                }
+                if (key && (key.startsWith(resumePrefix) || key === cwExact || key === cwMetaExact)) localStorage.removeItem(key);
             }
 
-            // 2. Animar cada episodio marcado como visto uno por uno
             const switches = Array.from(document.querySelectorAll('.ep-switch input:checked'));
             for (const input of switches) {
                 const row = input.closest('.ep-item') || input.closest('.ep-switch');
-                if (row) {
-                    row.style.transition = 'opacity 0.25s, transform 0.25s';
-                    row.style.opacity = '0.3';
-                    row.style.transform = 'translateX(6px)';
-                }
+                if (row) { row.style.transition = 'opacity 0.25s, transform 0.25s'; row.style.opacity = '0.3'; row.style.transform = 'translateX(6px)'; }
                 input.checked = false;
-                // Actualizar etiqueta
                 const match = input.id && input.id.match(/switch-(\d+)-(\d+)/);
-                if (match) {
-                    const lbl = document.getElementById(`lbl-${match[1]}-${match[2]}`);
-                    if (lbl) { lbl.textContent = 'Marcar visto'; lbl.classList.remove('on'); }
-                }
+                if (match) { const lbl = document.getElementById(`lbl-${match[1]}-${match[2]}`); if (lbl) { lbl.textContent = 'Marcar visto'; lbl.classList.remove('on'); } }
                 await new Promise(r => setTimeout(r, 60));
-                if (row) {
-                    row.style.opacity = '1';
-                    row.style.transform = 'translateX(0)';
-                }
+                if (row) { row.style.opacity = '1'; row.style.transform = 'translateX(0)'; }
             }
-
-            // 3. Cerrar modal y restaurar botón
             closeModal();
             await new Promise(r => setTimeout(r, 220));
-            btnConfirm.disabled = false;
-            btnConfirm.innerHTML = 'Resetear';
+            btnConfirm.disabled = false; btnConfirm.innerHTML = 'Resetear';
         });
     }
 })();
 
-/* Keyframe para el spinner del botón de reset */
 (function() {
     if (!document.getElementById('reset-spin-style')) {
-        const s = document.createElement('style');
-        s.id = 'reset-spin-style';
+        const s = document.createElement('style'); s.id = 'reset-spin-style';
         s.textContent = '@keyframes spin { 0%{transform:rotate(0deg)} 100%{transform:rotate(360deg)} }';
         document.head.appendChild(s);
     }
 })();
 
-// Escuchar la salida manual de pantalla completa globalmente para resetear el pending
-document.addEventListener('fullscreenchange', () => {
-    if (!document.fullscreenElement) {
-        window._pendingFullscreen = false;
-    }
-});
-document.addEventListener('webkitfullscreenchange', () => {
-    if (!document.webkitFullscreenElement) {
-        window._pendingFullscreen = false;
-    }
-});
+document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement) window._pendingFullscreen = false; });
+document.addEventListener('webkitfullscreenchange', () => { if (!document.webkitFullscreenElement) window._pendingFullscreen = false; });
