@@ -1473,6 +1473,31 @@ body {
   stroke: var(--accent) !important;
 }
 
+/* ── Barra de progreso en foco TV ────────────────────────*/
+[data-tv="1"] #progressWrap:focus,
+#progressWrap:focus-visible,
+[data-tv="1"] .progress-wrap:focus,
+.progress-wrap:focus-visible {
+  outline: 3px solid var(--accent) !important;
+  outline-offset: 3px !important;
+  z-index: 100;
+}
+
+[data-tv="1"] #progressWrap:focus .progress-track,
+#progressWrap:focus-visible .progress-track,
+[data-tv="1"] .progress-wrap:focus .progress-track,
+.progress-wrap:focus-visible .progress-track {
+  box-shadow: 0 0 0 2px rgba(255, 170, 0, 0.4) !important;
+}
+
+[data-tv="1"] #progressWrap:focus .progress-thumb,
+#progressWrap:focus-visible .progress-thumb,
+[data-tv="1"] .progress-wrap:focus .progress-thumb,
+.progress-wrap:focus-visible .progress-thumb {
+  box-shadow: 0 0 12px rgba(255, 170, 0, 0.8) !important;
+  transform: scale(1.3) !important;
+}
+
 /* ── Resume modal buttons ─────────────────────────────────*/
 [data-tv="1"] .vp-resume-btn:focus,
 .vp-resume-btn:focus-visible {
