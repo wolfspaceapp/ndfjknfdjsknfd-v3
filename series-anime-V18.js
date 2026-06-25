@@ -1403,6 +1403,16 @@ function buildVideoPlayer(wrap, url, poster, videoType, mainLoader, server, requ
                 let saveInterval = null;
                 v._resumeChecked = false;
 
+                // Función segura para reproducir el video sin conflictos
+                const safePlay = () => {
+                    const p = v.play();
+                    if (p !== undefined) {
+                        p.catch(err => {
+                            console.warn('Error al reproducir:', err.message);
+                        });
+                    }
+                };
+
                 const checkResume = () => {
                     if (requestId && requestId !== renderCount) return;
                     if (v._resumeChecked) return;
@@ -1423,14 +1433,20 @@ function buildVideoPlayer(wrap, url, poster, videoType, mainLoader, server, requ
 
                         if (hasSignificantProgress && isNearStart) {
                             showResumeToast(saved, () => {
-                                const jump = () => { v.currentTime = saved; v.play(); };
+                                const jump = () => { 
+                                    v.currentTime = saved; 
+                                    safePlay(); 
+                                };
                                 if (v.readyState >= 1) jump();
                                 else {
-                                    const h = () => { v.currentTime = saved; v.removeEventListener('loadedmetadata', h); };
+                                    const h = () => { 
+                                        v.currentTime = saved; 
+                                        v.removeEventListener('loadedmetadata', h); 
+                                    };
                                     v.addEventListener('loadedmetadata', h);
-                                    v.play();
+                                    safePlay();
                                 }
-                            }, () => { v.play(); });
+                            }, () => { safePlay(); });
                         }
                     };
 
@@ -1557,6 +1573,16 @@ function _buildNativePlayer(container, wrap, url, poster, videoType, mainLoader,
     let saveInterval = null;
     video._resumeChecked = false;
 
+    // Función segura para reproducir el video sin conflictos
+    const safePlayFallback = () => {
+        const p = video.play();
+        if (p !== undefined) {
+            p.catch(err => {
+                console.warn('Error al reproducir (fallback):', err.message);
+            });
+        }
+    };
+
     const checkResumeFallback = () => {
         if (requestId && requestId !== renderCount) return;
         if (video._resumeChecked) return;
@@ -1569,10 +1595,10 @@ function _buildNativePlayer(container, wrap, url, poster, videoType, mainLoader,
         const currentTime = video.currentTime || 0;
         if (saved > 30 && (currentTime < 60 || Math.abs(currentTime - saved) > 60)) {
             showResumeToast(saved, () => {
-                const jump = () => { video.currentTime = saved; video.play(); };
+                const jump = () => { video.currentTime = saved; safePlayFallback(); };
                 if (video.readyState >= 1) jump();
                 else video.addEventListener('loadedmetadata', jump, { once: true });
-            }, () => { video.play(); });
+            }, () => { safePlayFallback(); });
         }
     };
     video.addEventListener('loadedmetadata', checkResumeFallback);
