@@ -1280,7 +1280,7 @@ function buildVideoPlayer(wrap, url, poster, videoType, mainLoader, server, requ
                 clearInterval(preloadIv);
 
                 // Configuración crítica antes del load
-                if (url.includes('pixeldrain.com')) {
+                if (url.includes('pixeldrain.com') || url.includes('hf.co') || url.includes('huggingface.co')) {
                     v.setAttribute('referrerpolicy', 'no-referrer');
                 }
 
@@ -1470,6 +1470,11 @@ function buildVideoPlayer(wrap, url, poster, videoType, mainLoader, server, requ
         video.autoplay = window._isAutoplay || false;
         video.playsInline = true;
         video.style.cssText = 'width:100%;height:100%;background:#000;object-fit:contain';
+
+        // Configuración crítica de referrer
+        if (url.includes('pixeldrain.com') || url.includes('hf.co') || url.includes('huggingface.co')) {
+            video.setAttribute('referrerpolicy', 'no-referrer');
+        }
 
         if (videoType === 'hls' || isHLS(url)) {
             if (video.canPlayType('application/vnd.apple.mpegurl')) {
