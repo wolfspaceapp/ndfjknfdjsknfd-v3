@@ -1318,7 +1318,7 @@ function buildVideoPlayer(wrap, url, poster, videoType, mainLoader, server, requ
                 clearInterval(preloadIv);
 
                 // Configuración crítica antes del load
-                if (url.includes('pixeldrain.com') || url.includes('hf.co') || url.includes('huggingface.co')) {
+                if (url.includes('pixeldrain.com')) {
                     v.setAttribute('referrerpolicy', 'no-referrer');
                 }
 
@@ -1517,7 +1517,7 @@ function _buildNativePlayer(container, wrap, url, poster, videoType, mainLoader,
     video.style.cssText = 'width:100%;height:100%;background:#000;object-fit:contain';
 
     // Configuración crítica de referrer
-    if (url.includes('pixeldrain.com') || url.includes('hf.co') || url.includes('huggingface.co')) {
+    if (url.includes('pixeldrain.com')) {
         video.setAttribute('referrerpolicy', 'no-referrer');
     }
 
