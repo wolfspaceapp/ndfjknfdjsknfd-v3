@@ -1317,22 +1317,8 @@ function buildVideoPlayer(wrap, url, poster, videoType, mainLoader, server, requ
             if (v) {
                 clearInterval(preloadIv);
 
-                // Validar que WolfPlayer montó correctamente su skin (debe haber un wrapper de controles)
-                const hasSkin = container.querySelector('.wolf-player, .wolf-controls, [class*="wolf"]');
-                if (!hasSkin && container.children.length <= 1) {
-                    // Solo hay el <video> crudo, WolfPlayer no montó la UI — usar fallback
-                    console.warn('⚠️ WolfPlayer no montó skin, usando fallback nativo');
-                    if (wolfInstance && typeof wolfInstance.destroy === 'function') {
-                        try { wolfInstance.destroy(); } catch(e) {}
-                    }
-                    wolfInstance = null;
-                    container.innerHTML = '';
-                    _buildNativePlayer(container, wrap, url, poster, videoType, mainLoader, server, requestId, hideLoader);
-                    return;
-                }
-
                 // Configuración crítica antes del load
-                if (url.includes('pixeldrain.com')) {
+                if (url.includes('pixeldrain.com') || url.includes('hf.co') || url.includes('huggingface.co')) {
                     v.setAttribute('referrerpolicy', 'no-referrer');
                 }
 
@@ -1351,14 +1337,6 @@ function buildVideoPlayer(wrap, url, poster, videoType, mainLoader, server, requ
                 }, { once: true });
             } else if (++preloadAttempts > 40) {
                 clearInterval(preloadIv);
-                // Después de 2 segundos sin <video>, WolfPlayer no montó nada — fallback
-                console.warn('⚠️ WolfPlayer no generó <video> tras 2s, usando fallback nativo');
-                if (wolfInstance && typeof wolfInstance.destroy === 'function') {
-                    try { wolfInstance.destroy(); } catch(e) {}
-                }
-                wolfInstance = null;
-                container.innerHTML = '';
-                _buildNativePlayer(container, wrap, url, poster, videoType, mainLoader, server, requestId, hideLoader);
             }
         }, 50);
 
@@ -1366,9 +1344,7 @@ function buildVideoPlayer(wrap, url, poster, videoType, mainLoader, server, requ
             if (requestId && requestId !== renderCount) return;
 
             const v = container.querySelector('video');
-            if (!v) return; // Ya manejado por el preloadIv timeout
-
-            {
+            if (v) {
 
                 v.addEventListener('error', (e) => {
                     if (requestId && requestId !== renderCount) return;
@@ -1539,6 +1515,11 @@ function _buildNativePlayer(container, wrap, url, poster, videoType, mainLoader,
     video.autoplay = window._isAutoplay || false;
     video.playsInline = true;
     video.style.cssText = 'width:100%;height:100%;background:#000;object-fit:contain';
+
+    // Configuración crítica de referrer
+    if (url.includes('pixeldrain.com') || url.includes('hf.co') || url.includes('huggingface.co')) {
+        video.setAttribute('referrerpolicy', 'no-referrer');
+    }
 
     if (videoType === 'hls' || isHLS(url)) {
         if (video.canPlayType('application/vnd.apple.mpegurl')) {
