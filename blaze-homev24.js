@@ -28,8 +28,9 @@
 
         const welcomeLogoContainer = document.getElementById('welcome-logo-container');
         if (welcomeLogoContainer) {
-            if (CFG.aboutLogoUrl) {
-                welcomeLogoContainer.innerHTML = `<img src="${CFG.aboutLogoUrl}" alt="${name}" style="height:48px;max-width:100%;object-fit:contain">`;
+            const actualLogoUrl = CFG.aboutLogoUrl || (document.querySelector('link[rel*="icon"]') ? document.querySelector('link[rel*="icon"]').href : null);
+            if (actualLogoUrl) {
+                welcomeLogoContainer.innerHTML = `<img src="${actualLogoUrl}" alt="${name}" style="height:48px;max-width:100%;object-fit:contain">`;
                 welcomeLogoContainer.style.background = 'none';
                 welcomeLogoContainer.style.boxShadow = 'none';
             } else {
@@ -726,12 +727,7 @@
             try {
                 const m = JSON.parse(localStorage.getItem(k));
                 if (m && m.resumeKey) {
-                    const info = (window.DATA || []).find(d => String(d.id) === String(m.serieId) || d.url === 'go:' + m.serieId);
-                    if (info && info.urlContinue) {
-                        m.serieUrl = info.urlContinue;
-                    } else if (m.serieUrl && m.serieUrl.startsWith('go:')) {
-                        m.serieUrl = '';
-                    }
+                    if (!m.serieUrl && m.serieId) m.serieUrl = 'go:' + m.serieId;
                     items.push(m);
                     seenIds.add(String(m.serieId));
                     console.log('CW: Found meta for ' + m.serieId);
@@ -765,7 +761,7 @@
                     serieId: rawId,
                     serieTitle: info.title,
                     poster: info.poster || info.image || '',
-                    serieUrl: info.urlContinue || '',
+                    serieUrl: 'go:' + rawId,
                     seasonLabel: '',
                     epNum: epNum,
                     epTitle: '',
@@ -940,7 +936,12 @@
                 const m = items[idx];
                 if (m) {
                     console.log('CW: Navegando a URL de continuar viendo:', m.serieUrl);
-                    navigateToSerie(m.serieUrl);
+                    if (!m.serieUrl || m.serieUrl === '#') return;
+                    try {
+                        window.top.location.href = m.serieUrl;
+                    } catch(e) {
+                        try { window.location.href = m.serieUrl; } catch(e2) { window.open(m.serieUrl, '_blank'); }
+                    }
                 }
             }
         };
@@ -1674,8 +1675,9 @@
         if (descEl) descEl.textContent = CFG.aboutDescription || `${appName} es tu plataforma personal para descubrir y seguir el anime que más te gusta.`;
 
         if (iconEl) {
-            if (CFG.aboutLogoUrl) {
-                iconEl.innerHTML = `<img src="${CFG.aboutLogoUrl}" alt="${appName}" style="height:36px;object-fit:contain">`;
+            const actualLogoUrl = CFG.aboutLogoUrl || (document.querySelector('link[rel*="icon"]') ? document.querySelector('link[rel*="icon"]').href : null);
+            if (actualLogoUrl) {
+                iconEl.innerHTML = `<img src="${actualLogoUrl}" alt="${appName}" style="height:36px;object-fit:contain">`;
                 iconEl.style.background = 'none';
             } else {
                 iconEl.innerHTML = `<span style="font-size:24px;font-weight:900;background:linear-gradient(90deg,var(--accent),#FFD060);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">${appName.charAt(0)}</span>`;
@@ -1825,6 +1827,7 @@
         document.getElementById('detail-cta-main').addEventListener('click', () => { 
             console.log('Botón Reproducir presionado. Navegando a URL configurada:', item.url);
             if (!item.url || item.url === '#') return;
+            sessionStorage.setItem('wolfblaze_last_detail', item.id);
             try {
                 window.top.location.href = item.url;
             } catch(e) {
@@ -2721,6 +2724,13 @@
         });
 
         setTimeout(observeImages, 300);
+
+        // Restaurar la vista de detalle al regresar de una entrada
+        const lastDetailId = sessionStorage.getItem('wolfblaze_last_detail');
+        if (lastDetailId) {
+            sessionStorage.removeItem('wolfblaze_last_detail');
+            openDetail(+lastDetailId);
+        }
     }
 
     init();
