@@ -1442,14 +1442,14 @@
         const visibleCats = hCatEnabled ? [...CATEGORIES, '+18'] : CATEGORIES;
         catGrid.innerHTML = visibleCats.map((cat, index) => {
             const count = counts[cat] || 0;
-            const cfg = (window.CATEGORIES_CONFIG || []).find(x => x.name.toLowerCase().replace(':', '') === cat.toLowerCase().replace(':', '')) || { name: cat };
-            const icon = cfg.icon || '';
+            const cfg = (window.CATEGORIES_CONFIG || []).find(x => x.name.toLowerCase().replace(':', '') === cat.toLowerCase().replace(':', '')) || { name: cat, iconName: 'film' };
+            const iconName = cfg.iconName || 'film';
             const accent = cfg.accent || 'var(--accent)';
 
             return `
                 <div class="cat-card${cfg.backdrop ? ' cat-has-bg' : ''}" data-cat="${cat}">
                     <div class="cat-card-bg"${cfg.backdrop ? ` data-bg="${cfg.backdrop}"` : ''}></div>
-                    <div class="cat-card-icon" style="color:${accent}; border-color:${accent}44; background: ${accent}11;">${icon}</div>
+                    <div class="cat-card-icon" style="color:${accent}; border-color:${accent}44; background: ${accent}11;"><i data-lucide="${iconName}" style="width:20px;height:20px"></i></div>
                     <div class="cat-card-info">
                         <h3>${cat}</h3>
                         <div class="cat-card-count" style="background:${accent}; color:#000">${count} título${count !== 1 ? 's' : ''}</div>
@@ -1476,6 +1476,11 @@
             }, { rootMargin: '400px' });
             obs.observe(el);
         });
+
+        // Inicializar iconos Lucide después de insertar el HTML
+        if (typeof lucide !== 'undefined') {
+            lucide.createIcons();
+        }
     }
 
     function renderCatLibrary(cat) {
