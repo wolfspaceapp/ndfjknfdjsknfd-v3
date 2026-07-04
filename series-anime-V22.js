@@ -457,8 +457,10 @@ function updateLabels() {
         console.error('Error: servidor no disponible', activeServer);
         return;
     }
-    $('btn-lang-label').textContent = lang.name;
-    $('btn-srv-label').textContent = lang.servers[activeServer].name;
+    const langLabel = $('btn-lang-label');
+    const srvLabel  = $('btn-srv-label');
+    if (langLabel) langLabel.textContent = lang.name;
+    if (srvLabel)  srvLabel.textContent  = lang.servers[activeServer].name;
 }
 
 function openPicker(type) {
@@ -750,6 +752,7 @@ function resolveUrl(server) {
 
 function updateCast(url) {
     const castBtn = $('btn-cast');
+    if (!castBtn) return;
     if (!url) { castBtn.style.display = 'none'; return; }
     castBtn.style.display = '';
     castBtn._castUrl = `intent://${url.replace(/^https?:\/\//, '')}#Intent;scheme=${url.startsWith('https') ? 'https' : 'http'};package=com.instantbits.cast.webvideo;end`;
