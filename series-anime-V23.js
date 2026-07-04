@@ -1622,6 +1622,7 @@ function _buildNativePlayer(container, wrap, url, poster, videoType, mainLoader,
 
 function renderPlayer(animate = false) {
     const wrap = $('player-wrap');
+    if (!wrap) return; // El elemento no existe en este contexto (ej: Blogger sin layout de reproductor)
     const myCount = ++renderCount;
 
     if (hlsInstance) { hlsInstance.destroy(); hlsInstance = null; }
