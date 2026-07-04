@@ -295,7 +295,8 @@ function playEpisode(seasonIdx, epNum, animate = false, isAutoAdvance = false) {
     }
 
     // Mostrar reproductor y ocultar interfaz de serie
-    $('player-section').style.display = 'flex';
+    const playerSection = $('player-section');
+    if (playerSection) playerSection.style.display = 'flex';
     const epListEl = $('episodes-list');
     const seasonsWrapEl = document.querySelector('.seasons-wrap');
     if (epListEl) epListEl.style.display = 'none';
