@@ -567,7 +567,9 @@ function proxyFetch(url, timeoutMs) {
         return fetch(proxyUrl, opts)
             .then(r => {
                 if (!r.ok) throw new Error('HTTP ' + r.status);
-                return r.json().catch(() => r.text().then(t => ({ contents: t })));
+                // Clonar la respuesta para poder leer el body múltiples veces
+                const cloned = r.clone();
+                return r.json().catch(() => cloned.text().then(t => ({ contents: t })));
             })
             .catch(e => {
                 console.warn(`⚠️ Proxy ${idx + 1} falló:`, e.message, '→ intentando siguiente...');
@@ -582,7 +584,9 @@ function fetchDirect(url, timeoutMs) {
     return fetch(url, opts)
         .then(r => {
             if (!r.ok) throw new Error('HTTP ' + r.status);
-            return r.json().catch(() => r.text().then(t => ({ contents: t })));
+            // Clonar la respuesta para poder leer el body múltiples veces
+            const cloned = r.clone();
+            return r.json().catch(() => cloned.text().then(t => ({ contents: t })));
         });
 }
 
