@@ -803,12 +803,7 @@
                 const m = JSON.parse(localStorage.getItem(k));
                 // We trust the meta item if it exists and hasn't been explicitly cleared (which happens at >95% progress)
                 if (m && m.resumeKey) {
-                    const info = (window.DATA || []).find(d => String(d.id) === String(m.serieId) || d.url === 'go:' + m.serieId);
-                    if (info && info.urlContinue) {
-                        m.serieUrl = info.urlContinue;
-                    } else if (m.serieUrl && m.serieUrl.startsWith('go:')) {
-                        m.serieUrl = '';
-                    }
+                    if (!m.serieUrl && m.serieId) m.serieUrl = 'go:' + m.serieId;
                     items.push(m);
                     seenIds.add(String(m.serieId));
                     console.log('CW: Found meta for ' + m.serieId);
@@ -842,7 +837,7 @@
                     serieId: rawId,
                     serieTitle: info.title,
                     poster: info.poster || info.image || '',
-                    serieUrl: info.urlContinue || '',
+                    serieUrl: 'go:' + rawId,
                     seasonLabel: '',
                     epNum: epNum,
                     epTitle: '',
@@ -863,47 +858,14 @@
     function fmtCWTime(s) {
         if (!s) return '';
         s = Math.floor(s);
-        const h = Math.floor(s / 3600);
-        const m = Math.floor((s % 3600) / 60);
+        const m = Math.floor(s / 60);
         const ss = String(s % 60).padStart(2, '0');
-        if (h > 0) return `${h}h ${m}m`;
-        return m > 0 ? `${m}m` : `${ss}s`;
+        return m + ':' + ss;
     }
 
     function navigateToSerie(serieUrl) {
-        console.log('navigateToSerie called with URL:', serieUrl);
-        if (!serieUrl || serieUrl === '#' || serieUrl === '') {
-            console.log('Navegación abortada: URL vacía o inválida');
-            return;
-        }
-
-        // Si es una URL "go:ID", abrir detalle directamente (sub-navegación)
-        if (serieUrl.startsWith('go:')) {
-            console.log('Es un go:ID, abriendo detalles internally');
-            const idStr = serieUrl.split(':')[1];
-            openDetail(+idStr);
-            return;
-        }
-
-        console.log('Intentando abrir URL real:', serieUrl);
-        // Navegación directa para URLs externas (Botón Reproducir)
-        if (serieUrl.startsWith('http')) {
-            console.log('URL HTTP detectada, usando window.location.href');
-            window.location.href = serieUrl;
-        } else {
-            console.log('URL local o relativa detectada, intentando window.top.location.href');
-            try {
-                window.top.location.href = serieUrl;
-            } catch(e) {
-                console.error('Error al usar window.top:', e, 'Usando fallback window.location.href');
-                try {
-                    window.location.href = serieUrl;
-                } catch(e2) {
-                    console.error('Error al usar window.location:', e2, 'Usando fallback window.open');
-                    window.open(serieUrl, '_blank');
-                }
-            }
-        }
+        if (!serieUrl) return;
+        location.href = serieUrl;
     }
 
     function cwCardHTML(m, idx) {
@@ -951,6 +913,9 @@
         // Filter H content if disabled
         if (!hCatEnabled) {
             items = items.filter(m => {
+                // Check isH flag saved directly in CW metadata
+                if (m.isH) return false;
+                // Also check against DATA if available
                 const info = (window.DATA || []).find(d => String(d.id) === String(m.serieId) || d.url === 'go:' + m.serieId);
                 return !isH(info);
             });
@@ -962,9 +927,6 @@
             return; 
         }
 
-        console.log('CW: Total items found: ' + items.length);
-        section.style.display = '';
-
         // ── Smart update for real-time sync (avoid flickering) ──
         if (isSync && track.children.length === items.length) {
             let matches = 0;
@@ -972,7 +934,6 @@
                 const card = track.querySelector(`.cw-card[data-cw-key="${m.serieId}"]`);
                 if (card) {
                     matches++;
-                    card.dataset.cwIdx = i; // Asegurar que el índice esté fresco
                     const fill = card.querySelector('.cw-progress-fill');
                     if (fill) fill.style.width = `${Math.min(100, Math.max(2, m.progress || 0))}%`;
                     const sub = card.querySelector('.cw-sub');
@@ -985,39 +946,28 @@
                     }
                 }
             });
-            if (matches === items.length) {
-                // Incluso si saltamos el render, actualizamos el handler para que use los nuevos "items"
-                updateCWClickHandler(items);
-                return;
-            }
+            if (matches === items.length) return; // All updated smoothly
         }
 
         console.log('CW: Full render (' + items.length + ' items)');
+        section.style.display = '';
         track.innerHTML = items.map((m, i) => cwCardHTML(m, i)).join('');
-        updateCWClickHandler(items);
-    }
-
-    function updateCWClickHandler(items) {
-        const track = $('cw-track');
-        if (!track) return;
 
         track.onclick = (e) => {
             const removeBtn = e.target.closest('.cw-remove-btn');
             if (removeBtn) {
-                e.preventDefault();
                 e.stopPropagation();
-                e.stopImmediatePropagation();
                 _pendingCWDeleteId = removeBtn.dataset.cwRemove;
                 openModal('cw-delete-confirm-overlay');
                 return;
             }
-
+            
             const card = e.target.closest('.cw-card');
             if (card) {
                 const idx = parseInt(card.dataset.cwIdx);
                 const m = items[idx];
                 if (m) {
-                    console.log('CW: Navegando a URL de continuar viendo:', m.serieUrl);
+                    console.log('CW: Navigating to', m.serieUrl);
                     navigateToSerie(m.serieUrl);
                 }
             }
